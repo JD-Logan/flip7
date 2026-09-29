@@ -6,19 +6,12 @@
   <title>Flip 7 Tracker Pro</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    /* Hide scrollbar for status bar */
-    .no-scrollbar::-webkit-scrollbar {
-      display: none;
-    }
-    .no-scrollbar {
-      -ms-overflow-style: none;
-      scrollbar-width: none;
-    }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
   </style>
 </head>
 <body class="bg-slate-900 text-slate-100 p-4 font-sans antialiased max-w-md mx-auto relative min-h-screen">
 
-  <!-- Toast Notification Container -->
   <div id="toast-container" class="fixed top-4 left-1/2 -translate-x-1/2 z-[100] flex flex-col gap-2 pointer-events-none w-[90%] max-w-sm"></div>
 
   <!-- SETUP SCREEN -->
@@ -52,9 +45,7 @@
     </header>
 
     <!-- Player Status Bar -->
-    <div class="flex gap-2 overflow-x-auto pb-2 mb-4 no-scrollbar" id="player-status-bar">
-      <!-- Player tabs injected here -->
-    </div>
+    <div class="flex gap-2 overflow-x-auto pb-2 mb-4 no-scrollbar" id="player-status-bar"></div>
 
     <!-- Active Player Info -->
     <div class="bg-slate-800 p-4 rounded-xl mb-6 shadow-lg border border-slate-700 transition-all duration-300" id="active-player-card">
@@ -81,9 +72,7 @@
           <p class="text-xs text-slate-400">Active Cards (Tap to undo)</p>
           <span id="forced-draw-indicator" class="hidden text-xs font-bold text-rose-100 bg-rose-600 px-2 py-1 rounded shadow animate-pulse">3 FORCED DRAWS LEFT</span>
         </div>
-        <div id="active-cards" class="flex flex-wrap gap-2 min-h-[48px] bg-slate-900/50 p-2 rounded-lg border border-slate-700 border-dashed">
-          <!-- Active cards injected here -->
-        </div>
+        <div id="active-cards" class="flex flex-wrap gap-2 min-h-[48px] bg-slate-900/50 p-2 rounded-lg border border-slate-700 border-dashed"></div>
       </div>
     </div>
 
@@ -105,10 +94,8 @@
         <h3 class="text-xl font-bold">Select Drawn Card</h3>
         <button onclick="document.getElementById('card-modal').classList.add('hidden')" class="text-slate-400 text-3xl px-2 leading-none hover:text-white">&times;</button>
       </div>
-      
       <h4 class="text-sm font-bold text-slate-400 mb-3 tracking-wide uppercase">Numbers</h4>
       <div class="grid grid-cols-4 gap-2 mb-8" id="number-grid"></div>
-
       <h4 class="text-sm font-bold text-slate-400 mb-3 tracking-wide uppercase">Modifiers & Actions</h4>
       <div class="grid grid-cols-3 gap-2" id="action-grid"></div>
     </div>
@@ -119,14 +106,11 @@
     <div class="bg-slate-800 w-[90%] max-w-sm rounded-2xl p-6 border border-slate-600 shadow-2xl">
       <h3 id="target-modal-title" class="text-xl font-bold mb-2 text-center text-white">Select Target</h3>
       <p id="target-modal-desc" class="text-sm text-slate-400 text-center mb-6">Who receives this card?</p>
-      <div id="target-list" class="flex flex-col gap-3">
-        <!-- Player buttons injected here -->
-      </div>
+      <div id="target-list" class="flex flex-col gap-3"></div>
     </div>
   </div>
 
   <script>
-    // --- DATA STRUCTURES ---
     const DECK_TEMPLATE = {
       numbers: {0:1, 1:1, 2:2, 3:3, 4:4, 5:5, 6:6, 7:7, 8:8, 9:9, 10:10, 11:11, 12:12},
       modifiers: {'+2':1, '+4':1, '+6':1, '+8':1, '+10':1, 'x2':1},
@@ -134,44 +118,32 @@
     };
 
     let deck = JSON.parse(JSON.stringify(DECK_TEMPLATE));
-    
-    // Player State
     let playersCountSetting = 3;
     let players = [];
     let currentPlayerIndex = 0;
     
-    // Interrupt State (Flip 3 logic)
     let turnStack = []; 
     let forcedDrawsLeft = 0;
 
-    // --- UI UTILITIES ---
     function showToast(message) {
       const container = document.getElementById('toast-container');
       const toast = document.createElement('div');
-      
       let bgClass = 'bg-slate-800 border-slate-600';
       if (message.includes('BUST!') || message.includes('None')) bgClass = 'bg-rose-700 border-rose-500';
       if (message.includes('PREVENTED') || message.includes('survived')) bgClass = 'bg-emerald-700 border-emerald-500';
-      if (message.includes('Second Chance') && !message.includes('PREVENTED')) bgClass = 'bg-indigo-700 border-indigo-500';
+      if (message.includes('Action') || message.includes('Second Chance')) bgClass = 'bg-indigo-700 border-indigo-500';
 
       toast.className = `${bgClass} border text-white px-4 py-3 rounded-lg shadow-xl text-sm font-bold transform transition-all duration-300 translate-y-[-100%] opacity-0 text-center`;
       toast.innerText = message;
       
       container.appendChild(toast);
-      
-      // Animate in
-      requestAnimationFrame(() => {
-        toast.classList.remove('translate-y-[-100%]', 'opacity-0');
-      });
-      
-      // Remove after 3s
+      requestAnimationFrame(() => toast.classList.remove('translate-y-[-100%]', 'opacity-0'));
       setTimeout(() => {
         toast.classList.add('opacity-0');
         setTimeout(() => toast.remove(), 300);
       }, 3000);
     }
 
-    // --- SETUP LOGIC ---
     function changePlayerCount(delta) {
       playersCountSetting = Math.max(2, Math.min(8, playersCountSetting + delta));
       document.getElementById('player-count-display').innerText = playersCountSetting;
@@ -179,15 +151,10 @@
 
     function startGame() {
       players = Array.from({length: playersCountSetting}, (_, i) => ({
-        id: i,
-        name: `Player ${i + 1}`,
-        hand: [],
-        secondChance: false
+        id: i, name: `Player ${i + 1}`, hand: [], secondChance: false
       }));
-      
       document.getElementById('setup-screen').classList.add('hidden');
       document.getElementById('game-ui').classList.remove('hidden');
-      
       initControls();
       updateUI();
     }
@@ -198,7 +165,6 @@
       for(let i=0; i<=12; i++) {
         numGrid.innerHTML += `<button onclick="handleDraw('${i}', 'number')" class="bg-slate-700 hover:bg-slate-600 py-3 rounded-lg font-bold text-xl transition">${i}</button>`;
       }
-      
       const actionsGrid = document.getElementById('action-grid');
       actionsGrid.innerHTML = '';
       Object.keys(deck.modifiers).forEach(m => {
@@ -209,7 +175,6 @@
       });
     }
 
-    // --- DRAW LOGIC ---
     function handleDraw(value, type) {
       if (deck[type + 's'][value] <= 0) {
         showToast("None of those left in the deck!");
@@ -217,7 +182,6 @@
       }
       
       document.getElementById('card-modal').classList.add('hidden');
-      
       let player = players[currentPlayerIndex];
 
       if (type === 'action') {
@@ -226,18 +190,17 @@
           if (!player.secondChance) {
             player.secondChance = true;
             showToast(`${player.name} gets the Second Chance!`);
-            resolveDrawStep();
+            resolveDrawStep(true); // true = isInstantAction
           } else {
             let eligible = players.filter(p => !p.secondChance);
             if (eligible.length === 0) {
               showToast("Everyone already has a Second Chance! Card discarded.");
-              resolveDrawStep();
+              resolveDrawStep(true);
             } else {
               openTargetModal("Pass Second Chance", "You already have one. Who gets this?", eligible, (targetId) => {
                 players[targetId].secondChance = true;
-                resolveDrawStep();
+                resolveDrawStep(true);
               });
-              return; // Halt until modal resolves
             }
           }
         } 
@@ -245,22 +208,21 @@
           deck.actions['Flip3']--;
           let opponents = players.filter(p => p.id !== currentPlayerIndex);
           openTargetModal("Flip Three!", "Who must draw 3 cards?", opponents, (targetId) => {
-            // Hijack the turn
-            turnStack.push({
-              returnIndex: currentPlayerIndex,
-              previousForcedDraws: forcedDrawsLeft
-            });
+            turnStack.push({ returnIndex: currentPlayerIndex, previousForcedDraws: forcedDrawsLeft });
             currentPlayerIndex = targetId;
             forcedDrawsLeft = 3;
-            // Update UI to show the hijack, but DO NOT advance turn yet
+            showToast(`${players[targetId].name} is hijacked! Must draw 3.`);
             updateUI(); 
           });
-          return;
         }
         else if (value === 'Freeze') {
           deck.actions['Freeze']--;
-          showToast("Freeze drawn! (House rules apply)");
-          resolveDrawStep();
+          let opponents = players.filter(p => p.id !== currentPlayerIndex);
+          openTargetModal("Freeze!", "Who skips their next turn / banks now?", opponents, (targetId) => {
+            players[targetId].hand = [];
+            showToast(`${players[targetId].name} was FROZEN! Hand banked.`);
+            resolveDrawStep(true);
+          });
         }
       } 
       else if (type === 'number') {
@@ -268,72 +230,66 @@
         deck.numbers[value]--;
         
         if (activeNumbers.has(value)) {
-          // BUST CONDITION
           if (player.secondChance) {
             player.secondChance = false;
-            showToast(`BUST PREVENTED! ${player.name}'s Second Chance burned the duplicate ${value}.`);
-            // Effectively treated as a safe draw, so we resolve and advance turn
-            resolveDrawStep();
+            showToast(`BUST PREVENTED! Second Chance burned the duplicate ${value}.`);
+            resolveDrawStep(false); 
           } else {
             showToast(`BUST! ${player.name} drew a duplicate ${value}. Hand cleared.`);
             player.hand = [];
             
-            // If they bust while under a Flip 3, control returns to the attacker immediately
             if (turnStack.length > 0) {
               let previousState = turnStack.pop();
               currentPlayerIndex = previousState.returnIndex;
               forcedDrawsLeft = previousState.previousForcedDraws;
+              updateUI();
             } else {
               forcedDrawsLeft = 0; 
+              advanceTurnLogic(); 
             }
-            advanceTurnLogic(); 
           }
         } else {
-          // SAFE NUMBER
           player.hand.push({value, type});
-          resolveDrawStep();
+          resolveDrawStep(false);
         }
       } 
       else if (type === 'modifier') {
         deck.modifiers[value]--;
         player.hand.push({value, type});
-        resolveDrawStep();
+        resolveDrawStep(false);
       }
     }
 
-    function resolveDrawStep() {
-      // Check if this action was taken as part of a Forced Draw (Flip 3)
+    function resolveDrawStep(isInstantAction) {
       if (forcedDrawsLeft > 0) {
         forcedDrawsLeft--;
         if (forcedDrawsLeft === 0) {
           showToast(`${players[currentPlayerIndex].name} survived the Flip Three!`);
-          // Return control back to original player who played the Flip 3
           let previousState = turnStack.pop();
           currentPlayerIndex = previousState.returnIndex;
           forcedDrawsLeft = previousState.previousForcedDraws;
-          // The Flip 3 was the original player's single action. Now it resolves, turn advances.
-          advanceTurnLogic();
+          updateUI();
         } else {
-          updateUI(); // Wait for victim to take remaining forced draws
+          updateUI(); 
         }
       } else {
-        // Normal single action completed (Draw 1 card). Move to next player.
-        advanceTurnLogic();
+        if (isInstantAction) {
+          showToast("Instant Action resolved. You get to draw again!");
+          updateUI();
+        } else {
+          advanceTurnLogic();
+        }
       }
     }
 
-    // --- TURN MANAGEMENT ---
     function stayAndNextPlayer() {
-      // "Stay" means wiping current hand (banking points conceptually) and taking your 1 action
       players[currentPlayerIndex].hand = [];
       advanceTurnLogic();
     }
 
     function advanceTurnLogic() {
-      // Clear stack failsafes just in case
       turnStack = []; 
       forcedDrawsLeft = 0;
-      // Advance to next player rotationally
       currentPlayerIndex = (currentPlayerIndex + 1) % players.length;
       updateUI();
     }
@@ -355,11 +311,9 @@
       updateUI();
     }
 
-    // --- MODAL UTILS ---
     function openTargetModal(title, desc, targets, callback) {
       document.getElementById('target-modal-title').innerText = title;
       document.getElementById('target-modal-desc').innerText = desc;
-      
       const list = document.getElementById('target-list');
       list.innerHTML = '';
       
@@ -373,15 +327,12 @@
         };
         list.appendChild(btn);
       });
-      
       document.getElementById('target-modal').classList.remove('hidden');
     }
 
-    // --- UI RENDERER ---
     function updateUI() {
       let player = players[currentPlayerIndex];
 
-      // 1. Render Top Player Bar
       const statusBar = document.getElementById('player-status-bar');
       statusBar.innerHTML = players.map((p, i) => `
         <div class="flex-shrink-0 px-4 py-2 rounded-xl border ${i === currentPlayerIndex ? 'bg-emerald-900/40 border-emerald-500 text-emerald-100 shadow-md scale-105 transition-transform' : 'bg-slate-800 border-slate-700 text-slate-400 opacity-70'}">
@@ -391,7 +342,6 @@
         </div>
       `).join('');
 
-      // 2. Active Player UI
       document.getElementById('current-player-name').innerText = player.name;
       
       const container = document.getElementById('active-cards');
@@ -403,7 +353,6 @@
         ).join('');
       }
 
-      // 3. Handle Forced Draw UI changes
       const stayBtn = document.getElementById('stay-btn');
       const drawBtn = document.getElementById('draw-btn');
       const forcedIndicator = document.getElementById('forced-draw-indicator');
@@ -432,7 +381,6 @@
         forcedIndicator.classList.add('hidden');
       }
 
-      // 4. Math & Probabilities
       let totalCards = 0;
       let bustCardsRemaining = 0;
       let currentScore = 0;
@@ -462,7 +410,7 @@
         let safeDraws = totalCards - bustCardsRemaining;
         ev = ((safeDraws / totalCards) * (currentScore + 6)) - ((bustCardsRemaining / totalCards) * currentScore); 
       } else if (player.secondChance) {
-        ev = currentScore + 6; // Guaranteed safe draw
+        ev = currentScore + 6;
       }
 
       document.getElementById('cards-remaining').innerText = totalCards;
@@ -473,7 +421,6 @@
       
       document.getElementById('expected-value').innerText = (ev >= 0 ? '+' : '') + ev.toFixed(1);
 
-      // 5. Badge Recommendation
       const badge = document.getElementById('recommendation-badge');
       if (forcedDrawsLeft > 0) {
         badge.innerText = "FORCED DRAW";
