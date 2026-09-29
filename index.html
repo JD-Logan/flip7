@@ -145,7 +145,7 @@
       const container = document.getElementById('toast-container');
       const toast = document.createElement('div');
       let bgClass = 'bg-slate-800 border-slate-600';
-      if (message.includes('BUST!') || message.includes('None')) bgClass = 'bg-rose-700 border-rose-500';
+      if (message.includes('BUST!') || message.includes('None') || message.includes('No one else')) bgClass = 'bg-rose-700 border-rose-500';
       if (message.includes('PREVENTED') || message.includes('survived')) bgClass = 'bg-emerald-700 border-emerald-500';
       if (message.includes('Action') || message.includes('Second Chance') || message.includes('FROZEN')) bgClass = 'bg-indigo-700 border-indigo-500';
 
@@ -176,31 +176,53 @@
       }));
       document.getElementById('setup-screen').classList.add('hidden');
       document.getElementById('game-ui').classList.remove('hidden');
-      initControls();
       updateUI();
     }
 
-    function initControls() {
+    // This dynamically rebuilds the card grid every time the UI updates
+    function renderCardModalGrids() {
       const numGrid = document.getElementById('number-grid');
       numGrid.innerHTML = '';
       for(let i=0; i<=12; i++) {
-        numGrid.innerHTML += `<button onclick="handleDraw('${i}', 'number')" class="bg-slate-700 hover:bg-slate-600 py-3 rounded-lg font-bold text-xl transition">${i}</button>`;
+        let count = deck.numbers[i];
+        let opacityAttr = count === 0 ? 'opacity-30 cursor-not-allowed grayscale' : 'hover:bg-slate-600';
+        let clickAttr = count === 0 ? '' : `onclick="handleDraw('${i}', 'number')"`;
+        
+        numGrid.innerHTML += `
+          <button ${clickAttr} class="bg-slate-700 ${opacityAttr} pt-3 pb-2 rounded-lg font-bold text-xl transition flex flex-col items-center leading-none shadow-sm">
+            ${i}
+            <span class="text-[11px] text-slate-400 font-normal mt-1 block">x${count}</span>
+          </button>`;
       }
+      
       const actionsGrid = document.getElementById('action-grid');
       actionsGrid.innerHTML = '';
       Object.keys(deck.modifiers).forEach(m => {
-        actionsGrid.innerHTML += `<button onclick="handleDraw('${m}', 'modifier')" class="bg-blue-900 hover:bg-blue-800 py-3 rounded-lg font-bold text-sm text-blue-200 border border-blue-700 transition">${m}</button>`;
+        let count = deck.modifiers[m];
+        let opacityAttr = count === 0 ? 'opacity-30 cursor-not-allowed grayscale' : 'hover:bg-blue-800';
+        let clickAttr = count === 0 ? '' : `onclick="handleDraw('${m}', 'modifier')"`;
+        
+        actionsGrid.innerHTML += `
+          <button ${clickAttr} class="bg-blue-900 ${opacityAttr} pt-3 pb-2 rounded-lg font-bold text-sm text-blue-100 border border-blue-700 transition flex flex-col items-center leading-none shadow-sm">
+            ${m}
+            <span class="text-[11px] text-blue-300 font-normal mt-1 block">x${count}</span>
+          </button>`;
       });
       Object.keys(deck.actions).forEach(a => {
-        actionsGrid.innerHTML += `<button onclick="handleDraw('${a}', 'action')" class="bg-purple-900 hover:bg-purple-800 py-3 rounded-lg font-bold text-xs text-purple-200 border border-purple-700 transition">${a}</button>`;
+        let count = deck.actions[a];
+        let opacityAttr = count === 0 ? 'opacity-30 cursor-not-allowed grayscale' : 'hover:bg-purple-800';
+        let clickAttr = count === 0 ? '' : `onclick="handleDraw('${a}', 'action')"`;
+        
+        actionsGrid.innerHTML += `
+          <button ${clickAttr} class="bg-purple-900 ${opacityAttr} pt-3 pb-2 rounded-lg font-bold text-xs text-purple-100 border border-purple-700 transition flex flex-col items-center leading-none shadow-sm">
+            ${a}
+            <span class="text-[11px] text-purple-300 font-normal mt-1 block">x${count}</span>
+          </button>`;
       });
     }
 
     function handleDraw(value, type) {
-      if (deck[type + 's'][value] <= 0) {
-        showToast("None of those left in the deck!");
-        return;
-      }
+      if (deck[type + 's'][value] <= 0) return; // Prevent clicking disabled 0-count cards
       
       document.getElementById('card-modal').classList.add('hidden');
       let player = players[currentPlayerIndex];
@@ -228,31 +250,38 @@
         else if (value === 'Flip3') {
           deck.actions['Flip3']--;
           let activeOpponents = players.filter(p => p.id !== currentPlayerIndex && p.roundStatus === 'active');
+          
           if (activeOpponents.length === 0) {
-             showToast("No active opponents to attack!");
-             resolveDrawStep();
-             return;
+             showToast("No one else active! You must Flip Three yourself.");
+             turnStack.push({ returnIndex: currentPlayerIndex, previousForcedDraws: forcedDrawsLeft });
+             forcedDrawsLeft = 3;
+             updateUI();
+          } else {
+             openTargetModal("Flip Three!", "Who must draw 3 cards?", activeOpponents, (targetId) => {
+               turnStack.push({ returnIndex: currentPlayerIndex, previousForcedDraws: forcedDrawsLeft });
+               currentPlayerIndex = targetId;
+               forcedDrawsLeft = 3;
+               showToast(`${players[targetId].name} is hijacked! Must draw 3.`);
+               updateUI(); 
+             });
           }
-          openTargetModal("Flip Three!", "Who must draw 3 cards?", activeOpponents, (targetId) => {
-            turnStack.push({ returnIndex: currentPlayerIndex, previousForcedDraws: forcedDrawsLeft });
-            currentPlayerIndex = targetId;
-            forcedDrawsLeft = 3;
-            showToast(`${players[targetId].name} is hijacked! Must draw 3.`);
-            updateUI(); 
-          });
         }
         else if (value === 'Freeze') {
           deck.actions['Freeze']--;
-          let activePlayers = players.filter(p => p.roundStatus === 'active');
-          if (activePlayers.length === 0) {
+          let activeOpponents = players.filter(p => p.id !== currentPlayerIndex && p.roundStatus === 'active');
+          
+          if (activeOpponents.length === 0) {
+              showToast("No one else active! You freeze yourself.");
+              players[currentPlayerIndex].roundStatus = 'frozen';
               resolveDrawStep();
-              return;
+          } else {
+              let activePlayers = players.filter(p => p.roundStatus === 'active');
+              openTargetModal("Freeze!", "Choose an active player to freeze.", activePlayers, (targetId) => {
+                players[targetId].roundStatus = 'frozen';
+                showToast(`${players[targetId].name} was FROZEN! They can no longer draw.`);
+                resolveDrawStep();
+              });
           }
-          openTargetModal("Freeze!", "Choose an active player to freeze.", activePlayers, (targetId) => {
-            players[targetId].roundStatus = 'frozen';
-            showToast(`${players[targetId].name} was FROZEN! They can no longer draw.`);
-            resolveDrawStep();
-          });
         }
       } 
       else if (type === 'number') {
@@ -292,23 +321,18 @@
     }
 
     function resolveDrawStep() {
-      // If we are currently in the middle of a Flip 3 Hijack
       if (forcedDrawsLeft > 0) {
         forcedDrawsLeft--;
         if (forcedDrawsLeft === 0) {
           showToast(`${players[currentPlayerIndex].name} survived the Flip Three!`);
           let previousState = turnStack.pop();
-          currentPlayerIndex = previousState.returnIndex; // Returns to attacker
+          currentPlayerIndex = previousState.returnIndex; 
           forcedDrawsLeft = previousState.previousForcedDraws;
-          
-          // The Flip 3 attack has fully concluded, so we advance past the attacker
           advanceTurnLogic(); 
         } else {
-          // Waiting for victim to take remaining forced draws
           updateUI(); 
         }
       } else {
-        // Standard turn over (whether they drew a number, modifier, or action)
         advanceTurnLogic();
       }
     }
@@ -325,13 +349,11 @@
       
       let activeCount = players.filter(p => p.roundStatus === 'active').length;
       
-      // If nobody is active, round is over
       if (activeCount === 0) {
          triggerEndRound();
          return;
       }
 
-      // Loop until we find the next active player
       do {
         currentPlayerIndex = (currentPlayerIndex + 1) % players.length;
       } while (players[currentPlayerIndex].roundStatus !== 'active');
@@ -358,7 +380,6 @@
        const list = document.getElementById('tally-list');
        list.innerHTML = '';
        
-       // Calculate and assign scores
        players.forEach(p => {
           let roundScore = calculatePlayerScore(p);
           p.totalScore += roundScore;
@@ -385,17 +406,14 @@
     }
 
     function startNextRound() {
-       // Reset Deck entirely
        deck = JSON.parse(JSON.stringify(DECK_TEMPLATE));
        
-       // Reset Players for new round
        players.forEach(p => {
           p.hand = [];
           p.roundStatus = 'active';
           p.secondChance = false;
        });
        
-       // Advance to whoever is next in line after the last player who acted
        currentPlayerIndex = (currentPlayerIndex + 1) % players.length;
        turnStack = [];
        forcedDrawsLeft = 0;
@@ -444,6 +462,9 @@
     }
 
     function updateUI() {
+      // 1. Force the Modal to rebuild its exact counts
+      renderCardModalGrids();
+
       let player = players[currentPlayerIndex];
 
       const statusBar = document.getElementById('player-status-bar');
@@ -523,7 +544,6 @@
       probEl.innerText = (probBust * 100).toFixed(1) + '%';
       probEl.className = `text-2xl font-mono font-bold ${probBust >= 0.25 ? 'text-rose-500' : (probBust > 0.15 ? 'text-amber-400' : 'text-emerald-400')}`;
       
-      // Update UI to show exact Current Points instead of EV since rules are discrete
       document.getElementById('expected-value').innerText = currentScore;
 
       const badge = document.getElementById('recommendation-badge');
