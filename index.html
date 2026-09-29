@@ -39,7 +39,7 @@
         <h1 class="text-xl font-bold text-emerald-400">Flip 7 Tracker</h1>
         <p class="text-sm text-slate-400">Deck: <span id="cards-remaining">94</span>/94 left</p>
       </div>
-      <button onclick="reshuffleDeck()" class="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm font-semibold transition shadow">
+      <button onclick="reshuffleDeckButton()" class="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm font-semibold transition shadow">
         Reshuffle
       </button>
     </header>
@@ -62,8 +62,8 @@
           <p id="prob-bust" class="text-2xl font-mono font-bold text-emerald-400">0.0%</p>
         </div>
         <div class="bg-slate-900 p-3 rounded-lg text-center shadow-inner border border-slate-800">
-          <p class="text-xs text-slate-400 mb-1">Expected Value</p>
-          <p id="expected-value" class="text-2xl font-mono font-bold text-blue-400">+0.0</p>
+          <p class="text-xs text-slate-400 mb-1">Current Points</p>
+          <p id="expected-value" class="text-2xl font-mono font-bold text-blue-400">0</p>
         </div>
       </div>
       
@@ -78,8 +78,8 @@
 
     <!-- Controls -->
     <div class="grid grid-cols-2 gap-4 mb-6">
-      <button id="stay-btn" onclick="stayAndNextPlayer()" class="bg-slate-700 hover:bg-slate-600 py-4 rounded-xl font-bold transition text-slate-200">
-        Stay / End Turn
+      <button id="stay-btn" onclick="stayAction()" class="bg-slate-700 hover:bg-slate-600 py-4 rounded-xl font-bold transition text-slate-200">
+        Stay
       </button>
       <button id="draw-btn" onclick="document.getElementById('card-modal').classList.remove('hidden')" class="bg-emerald-600 hover:bg-emerald-500 py-4 rounded-xl font-bold text-white shadow-lg shadow-emerald-900/50 transition col-span-1 text-lg">
         + Draw Card
@@ -110,6 +110,22 @@
     </div>
   </div>
 
+  <!-- ROUND TALLY SCREEN -->
+  <div id="tally-screen" class="hidden absolute inset-0 z-[80] bg-slate-900 flex flex-col items-center justify-center p-6">
+    <h1 class="text-4xl font-bold text-emerald-400 mb-2">Round Over!</h1>
+    <p class="text-slate-400 mb-6">Score Summary</p>
+    
+    <div class="bg-slate-800 p-4 rounded-2xl w-full max-w-sm border border-slate-700 shadow-2xl mb-6">
+      <div id="tally-list" class="flex flex-col gap-3">
+        <!-- Tally injected here -->
+      </div>
+    </div>
+    
+    <button onclick="startNextRound()" class="w-full max-w-sm bg-indigo-600 hover:bg-indigo-500 py-4 rounded-xl font-bold text-white shadow-lg shadow-indigo-900/50 transition text-lg">
+      Start Next Round
+    </button>
+  </div>
+
   <script>
     const DECK_TEMPLATE = {
       numbers: {0:1, 1:1, 2:2, 3:3, 4:4, 5:5, 6:6, 7:7, 8:8, 9:9, 10:10, 11:11, 12:12},
@@ -131,9 +147,9 @@
       let bgClass = 'bg-slate-800 border-slate-600';
       if (message.includes('BUST!') || message.includes('None')) bgClass = 'bg-rose-700 border-rose-500';
       if (message.includes('PREVENTED') || message.includes('survived')) bgClass = 'bg-emerald-700 border-emerald-500';
-      if (message.includes('Action') || message.includes('Second Chance')) bgClass = 'bg-indigo-700 border-indigo-500';
+      if (message.includes('Action') || message.includes('Second Chance') || message.includes('FROZEN')) bgClass = 'bg-indigo-700 border-indigo-500';
 
-      toast.className = `${bgClass} border text-white px-4 py-3 rounded-lg shadow-xl text-sm font-bold transform transition-all duration-300 translate-y-[-100%] opacity-0 text-center`;
+      toast.className = `${bgClass} border text-white px-4 py-3 rounded-lg shadow-xl text-sm font-bold transform transition-all duration-300 translate-y-[-100%] opacity-0 text-center z-[100]`;
       toast.innerText = message;
       
       container.appendChild(toast);
@@ -151,7 +167,12 @@
 
     function startGame() {
       players = Array.from({length: playersCountSetting}, (_, i) => ({
-        id: i, name: `Player ${i + 1}`, hand: [], secondChance: false
+        id: i, 
+        name: `Player ${i + 1}`, 
+        hand: [], 
+        secondChance: false,
+        roundStatus: 'active', // active, stayed, busted, frozen
+        totalScore: 0
       }));
       document.getElementById('setup-screen').classList.add('hidden');
       document.getElementById('game-ui').classList.remove('hidden');
@@ -190,11 +211,11 @@
           if (!player.secondChance) {
             player.secondChance = true;
             showToast(`${player.name} gets the Second Chance!`);
-            resolveDrawStep(true); // true = isInstantAction
+            resolveDrawStep(true); 
           } else {
-            let eligible = players.filter(p => !p.secondChance);
+            let eligible = players.filter(p => !p.secondChance && p.roundStatus === 'active');
             if (eligible.length === 0) {
-              showToast("Everyone already has a Second Chance! Card discarded.");
+              showToast("Everyone active already has a Second Chance! Card discarded.");
               resolveDrawStep(true);
             } else {
               openTargetModal("Pass Second Chance", "You already have one. Who gets this?", eligible, (targetId) => {
@@ -206,8 +227,13 @@
         } 
         else if (value === 'Flip3') {
           deck.actions['Flip3']--;
-          let opponents = players.filter(p => p.id !== currentPlayerIndex);
-          openTargetModal("Flip Three!", "Who must draw 3 cards?", opponents, (targetId) => {
+          let activeOpponents = players.filter(p => p.id !== currentPlayerIndex && p.roundStatus === 'active');
+          if (activeOpponents.length === 0) {
+             showToast("No active opponents to attack!");
+             resolveDrawStep(true);
+             return;
+          }
+          openTargetModal("Flip Three!", "Who must draw 3 cards?", activeOpponents, (targetId) => {
             turnStack.push({ returnIndex: currentPlayerIndex, previousForcedDraws: forcedDrawsLeft });
             currentPlayerIndex = targetId;
             forcedDrawsLeft = 3;
@@ -217,11 +243,21 @@
         }
         else if (value === 'Freeze') {
           deck.actions['Freeze']--;
-          let opponents = players.filter(p => p.id !== currentPlayerIndex);
-          openTargetModal("Freeze!", "Who skips their next turn / banks now?", opponents, (targetId) => {
-            players[targetId].hand = [];
-            showToast(`${players[targetId].name} was FROZEN! Hand banked.`);
-            resolveDrawStep(true);
+          let activePlayers = players.filter(p => p.roundStatus === 'active');
+          if (activePlayers.length === 0) {
+              resolveDrawStep(true);
+              return;
+          }
+          openTargetModal("Freeze!", "Choose an active player to freeze.", activePlayers, (targetId) => {
+            players[targetId].roundStatus = 'frozen';
+            showToast(`${players[targetId].name} was FROZEN! They can no longer draw.`);
+            
+            // If they froze themselves, their turn immediately ends
+            if (targetId === currentPlayerIndex) {
+               resolveDrawStep(false); 
+            } else {
+               resolveDrawStep(true);
+            }
           });
         }
       } 
@@ -237,12 +273,18 @@
           } else {
             showToast(`BUST! ${player.name} drew a duplicate ${value}. Hand cleared.`);
             player.hand = [];
+            player.roundStatus = 'busted';
             
             if (turnStack.length > 0) {
               let previousState = turnStack.pop();
               currentPlayerIndex = previousState.returnIndex;
               forcedDrawsLeft = previousState.previousForcedDraws;
               updateUI();
+              
+              // If returning to original player and they are no longer active, advance
+              if (players[currentPlayerIndex].roundStatus !== 'active') {
+                 advanceTurnLogic();
+              }
             } else {
               forcedDrawsLeft = 0; 
               advanceTurnLogic(); 
@@ -268,13 +310,18 @@
           let previousState = turnStack.pop();
           currentPlayerIndex = previousState.returnIndex;
           forcedDrawsLeft = previousState.previousForcedDraws;
-          updateUI();
+          
+          if (players[currentPlayerIndex].roundStatus !== 'active') {
+             advanceTurnLogic();
+          } else {
+             updateUI();
+          }
         } else {
           updateUI(); 
         }
       } else {
         if (isInstantAction) {
-          showToast("Instant Action resolved. You get to draw again!");
+          showToast("Instant Action resolved. Draw again!");
           updateUI();
         } else {
           advanceTurnLogic();
@@ -282,16 +329,98 @@
       }
     }
 
-    function stayAndNextPlayer() {
-      players[currentPlayerIndex].hand = [];
+    function stayAction() {
+      players[currentPlayerIndex].roundStatus = 'stayed';
+      showToast(`${players[currentPlayerIndex].name} banked their cards!`);
       advanceTurnLogic();
     }
 
     function advanceTurnLogic() {
       turnStack = []; 
       forcedDrawsLeft = 0;
-      currentPlayerIndex = (currentPlayerIndex + 1) % players.length;
+      
+      let activeCount = players.filter(p => p.roundStatus === 'active').length;
+      
+      // If nobody is active, round is over
+      if (activeCount === 0) {
+         triggerEndRound();
+         return;
+      }
+
+      // Loop until we find the next active player
+      do {
+        currentPlayerIndex = (currentPlayerIndex + 1) % players.length;
+      } while (players[currentPlayerIndex].roundStatus !== 'active');
+      
       updateUI();
+    }
+
+    function calculatePlayerScore(player) {
+       let score = 0;
+       let multiplier = 1;
+       player.hand.forEach(c => {
+         if (c.type === 'number') score += parseInt(c.value);
+         if (c.type === 'modifier') {
+           if (c.value === 'x2') multiplier = 2;
+           else score += parseInt(c.value.replace('+',''));
+         }
+       });
+       return score * multiplier;
+    }
+
+    function triggerEndRound() {
+       document.getElementById('game-ui').classList.add('hidden');
+       
+       const list = document.getElementById('tally-list');
+       list.innerHTML = '';
+       
+       // Calculate and assign scores
+       players.forEach(p => {
+          let roundScore = calculatePlayerScore(p);
+          p.totalScore += roundScore;
+          
+          let statusBadge = '';
+          if (p.roundStatus === 'busted') statusBadge = '<span class="text-[10px] bg-rose-600 text-white px-2 py-0.5 rounded ml-2">BUSTED</span>';
+          else if (p.roundStatus === 'frozen') statusBadge = '<span class="text-[10px] bg-indigo-600 text-white px-2 py-0.5 rounded ml-2">FROZEN</span>';
+          else statusBadge = '<span class="text-[10px] bg-slate-600 text-white px-2 py-0.5 rounded ml-2">STAYED</span>';
+          
+          list.innerHTML += `
+             <div class="flex justify-between items-center bg-slate-700/50 p-3 rounded-lg border border-slate-600">
+                <div>
+                   <div class="font-bold text-slate-200">${p.name} ${statusBadge}</div>
+                   <div class="text-xs text-emerald-400 font-mono mt-1">+${roundScore} this round</div>
+                </div>
+                <div class="text-xl font-bold font-mono text-white">
+                   Total: ${p.totalScore}
+                </div>
+             </div>
+          `;
+       });
+       
+       document.getElementById('tally-screen').classList.remove('hidden');
+    }
+
+    function startNextRound() {
+       // Reset Deck entirely
+       deck = JSON.parse(JSON.stringify(DECK_TEMPLATE));
+       
+       // Reset Players for new round
+       players.forEach(p => {
+          p.hand = [];
+          p.roundStatus = 'active';
+          p.secondChance = false;
+       });
+       
+       // Advance to whoever is next in line after the last player who acted
+       currentPlayerIndex = (currentPlayerIndex + 1) % players.length;
+       turnStack = [];
+       forcedDrawsLeft = 0;
+       
+       document.getElementById('tally-screen').classList.add('hidden');
+       document.getElementById('game-ui').classList.remove('hidden');
+       
+       showToast("New round started! Deck reshuffled.");
+       updateUI();
     }
 
     function removeCard(playerIndex, handIndex) {
@@ -301,13 +430,13 @@
       updateUI();
     }
 
-    function reshuffleDeck() {
+    function reshuffleDeckButton() {
       deck = JSON.parse(JSON.stringify(DECK_TEMPLATE));
       players.forEach(p => {
         p.hand.forEach(card => deck[card.type + 's'][card.value]--);
         if (p.secondChance) deck.actions['SecondChance']--;
       });
-      showToast("Deck dynamically reshuffled!");
+      showToast("Deck manually verified and reshuffled!");
       updateUI();
     }
 
@@ -334,13 +463,22 @@
       let player = players[currentPlayerIndex];
 
       const statusBar = document.getElementById('player-status-bar');
-      statusBar.innerHTML = players.map((p, i) => `
-        <div class="flex-shrink-0 px-4 py-2 rounded-xl border ${i === currentPlayerIndex ? 'bg-emerald-900/40 border-emerald-500 text-emerald-100 shadow-md scale-105 transition-transform' : 'bg-slate-800 border-slate-700 text-slate-400 opacity-70'}">
+      statusBar.innerHTML = players.map((p, i) => {
+        let opacity = p.roundStatus === 'active' ? 'opacity-100' : 'opacity-40';
+        let bg = i === currentPlayerIndex ? 'bg-emerald-900/60 border-emerald-500 text-emerald-100 shadow-md scale-105 transition-transform' : 'bg-slate-800 border-slate-700 text-slate-400';
+        
+        let statusText = `${p.hand.length} CARDS`;
+        if (p.roundStatus === 'stayed') statusText = 'STAYED';
+        if (p.roundStatus === 'busted') statusText = 'BUSTED';
+        if (p.roundStatus === 'frozen') statusText = 'FROZEN';
+
+        return `
+        <div class="flex-shrink-0 px-4 py-2 rounded-xl border ${bg} ${opacity}">
           <span class="font-bold text-sm">${p.name}</span>
           ${p.secondChance ? `<span class="ml-1 text-[10px] bg-amber-500 text-amber-950 px-1.5 py-0.5 rounded-full font-bold">SC</span>` : ''}
-          <div class="text-[11px] mt-1 tracking-wide">${p.hand.length} CARDS</div>
+          <div class="text-[10px] mt-1 tracking-wide font-bold">${statusText}</div>
         </div>
-      `).join('');
+      `}).join('');
 
       document.getElementById('current-player-name').innerText = player.name;
       
@@ -383,8 +521,6 @@
 
       let totalCards = 0;
       let bustCardsRemaining = 0;
-      let currentScore = 0;
-      let multiplier = 1;
       const activeNumbers = new Set(player.hand.filter(c => c.type === 'number').map(c => c.value));
 
       Object.entries(deck.numbers).forEach(([val, count]) => {
@@ -394,32 +530,17 @@
       Object.values(deck.modifiers).forEach(count => totalCards += count);
       Object.values(deck.actions).forEach(count => totalCards += count);
 
-      player.hand.forEach(c => {
-        if (c.type === 'number') currentScore += parseInt(c.value);
-        if (c.type === 'modifier') {
-          if (c.value === 'x2') multiplier = 2;
-          else currentScore += parseInt(c.value.replace('+',''));
-        }
-      });
-      currentScore *= multiplier;
-
       let probBust = player.secondChance ? 0 : (totalCards > 0 ? (bustCardsRemaining / totalCards) : 0);
+      let currentScore = calculatePlayerScore(player);
       
-      let ev = 0;
-      if (totalCards > 0 && !player.secondChance) {
-        let safeDraws = totalCards - bustCardsRemaining;
-        ev = ((safeDraws / totalCards) * (currentScore + 6)) - ((bustCardsRemaining / totalCards) * currentScore); 
-      } else if (player.secondChance) {
-        ev = currentScore + 6;
-      }
-
       document.getElementById('cards-remaining').innerText = totalCards;
       
       const probEl = document.getElementById('prob-bust');
       probEl.innerText = (probBust * 100).toFixed(1) + '%';
       probEl.className = `text-2xl font-mono font-bold ${probBust >= 0.25 ? 'text-rose-500' : (probBust > 0.15 ? 'text-amber-400' : 'text-emerald-400')}`;
       
-      document.getElementById('expected-value').innerText = (ev >= 0 ? '+' : '') + ev.toFixed(1);
+      // Update UI to show exact Current Points instead of EV since rules are discrete
+      document.getElementById('expected-value').innerText = currentScore;
 
       const badge = document.getElementById('recommendation-badge');
       if (forcedDrawsLeft > 0) {
@@ -428,10 +549,10 @@
       } else if (player.hand.length === 0) {
         badge.innerText = "NEW HAND";
         badge.className = "px-3 py-1 rounded-full text-[10px] font-bold bg-slate-700 text-slate-300 tracking-wider";
-      } else if (player.secondChance || probBust < 0.15 || ev > currentScore) {
+      } else if (player.secondChance || probBust < 0.15) {
         badge.innerText = "RECOMMEND: HIT";
         badge.className = "px-3 py-1 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500 tracking-wider";
-      } else if (probBust >= 0.25 || ev <= 0) {
+      } else if (probBust >= 0.25) {
         badge.innerText = "RECOMMEND: STAY";
         badge.className = "px-3 py-1 rounded-full text-[10px] font-bold bg-rose-500/20 text-rose-400 border border-rose-500 tracking-wider";
       } else {
