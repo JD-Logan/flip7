@@ -211,16 +211,16 @@
           if (!player.secondChance) {
             player.secondChance = true;
             showToast(`${player.name} gets the Second Chance!`);
-            resolveDrawStep(true); 
+            resolveDrawStep(); 
           } else {
             let eligible = players.filter(p => !p.secondChance && p.roundStatus === 'active');
             if (eligible.length === 0) {
               showToast("Everyone active already has a Second Chance! Card discarded.");
-              resolveDrawStep(true);
+              resolveDrawStep();
             } else {
               openTargetModal("Pass Second Chance", "You already have one. Who gets this?", eligible, (targetId) => {
                 players[targetId].secondChance = true;
-                resolveDrawStep(true);
+                resolveDrawStep();
               });
             }
           }
@@ -230,7 +230,7 @@
           let activeOpponents = players.filter(p => p.id !== currentPlayerIndex && p.roundStatus === 'active');
           if (activeOpponents.length === 0) {
              showToast("No active opponents to attack!");
-             resolveDrawStep(true);
+             resolveDrawStep();
              return;
           }
           openTargetModal("Flip Three!", "Who must draw 3 cards?", activeOpponents, (targetId) => {
@@ -245,19 +245,13 @@
           deck.actions['Freeze']--;
           let activePlayers = players.filter(p => p.roundStatus === 'active');
           if (activePlayers.length === 0) {
-              resolveDrawStep(true);
+              resolveDrawStep();
               return;
           }
           openTargetModal("Freeze!", "Choose an active player to freeze.", activePlayers, (targetId) => {
             players[targetId].roundStatus = 'frozen';
             showToast(`${players[targetId].name} was FROZEN! They can no longer draw.`);
-            
-            // If they froze themselves, their turn immediately ends
-            if (targetId === currentPlayerIndex) {
-               resolveDrawStep(false); 
-            } else {
-               resolveDrawStep(true);
-            }
+            resolveDrawStep();
           });
         }
       } 
@@ -269,7 +263,7 @@
           if (player.secondChance) {
             player.secondChance = false;
             showToast(`BUST PREVENTED! Second Chance burned the duplicate ${value}.`);
-            resolveDrawStep(false); 
+            resolveDrawStep(); 
           } else {
             showToast(`BUST! ${player.name} drew a duplicate ${value}. Hand cleared.`);
             player.hand = [];
@@ -279,12 +273,7 @@
               let previousState = turnStack.pop();
               currentPlayerIndex = previousState.returnIndex;
               forcedDrawsLeft = previousState.previousForcedDraws;
-              updateUI();
-              
-              // If returning to original player and they are no longer active, advance
-              if (players[currentPlayerIndex].roundStatus !== 'active') {
-                 advanceTurnLogic();
-              }
+              advanceTurnLogic();
             } else {
               forcedDrawsLeft = 0; 
               advanceTurnLogic(); 
@@ -292,40 +281,35 @@
           }
         } else {
           player.hand.push({value, type});
-          resolveDrawStep(false);
+          resolveDrawStep();
         }
       } 
       else if (type === 'modifier') {
         deck.modifiers[value]--;
         player.hand.push({value, type});
-        resolveDrawStep(false);
+        resolveDrawStep();
       }
     }
 
-    function resolveDrawStep(isInstantAction) {
+    function resolveDrawStep() {
+      // If we are currently in the middle of a Flip 3 Hijack
       if (forcedDrawsLeft > 0) {
         forcedDrawsLeft--;
         if (forcedDrawsLeft === 0) {
           showToast(`${players[currentPlayerIndex].name} survived the Flip Three!`);
           let previousState = turnStack.pop();
-          currentPlayerIndex = previousState.returnIndex;
+          currentPlayerIndex = previousState.returnIndex; // Returns to attacker
           forcedDrawsLeft = previousState.previousForcedDraws;
           
-          if (players[currentPlayerIndex].roundStatus !== 'active') {
-             advanceTurnLogic();
-          } else {
-             updateUI();
-          }
+          // The Flip 3 attack has fully concluded, so we advance past the attacker
+          advanceTurnLogic(); 
         } else {
+          // Waiting for victim to take remaining forced draws
           updateUI(); 
         }
       } else {
-        if (isInstantAction) {
-          showToast("Instant Action resolved. Draw again!");
-          updateUI();
-        } else {
-          advanceTurnLogic();
-        }
+        // Standard turn over (whether they drew a number, modifier, or action)
+        advanceTurnLogic();
       }
     }
 
