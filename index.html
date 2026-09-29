@@ -17,31 +17,42 @@
   <!-- SETUP SCREEN -->
   <div id="setup-screen" class="absolute inset-0 z-50 bg-slate-900 flex flex-col items-center justify-center p-6">
     <h1 class="text-4xl font-bold text-emerald-400 mb-2">Flip 7</h1>
-    <p class="text-slate-400 mb-8">Probability Tracker Engine</p>
+    <p class="text-slate-400 mb-6">Probability Tracker Engine</p>
     
-    <div class="bg-slate-800 p-6 rounded-2xl w-full max-w-xs text-center border border-slate-700 shadow-2xl">
-      <label class="block text-sm font-bold text-slate-300 mb-4">How many players?</label>
-      <div class="flex items-center justify-center gap-4 mb-6">
-        <button onclick="changePlayerCount(-1)" class="bg-slate-700 hover:bg-slate-600 w-12 h-12 rounded-full font-bold text-2xl transition">-</button>
+    <div class="bg-slate-800 p-6 rounded-2xl w-full max-w-sm text-center border border-slate-700 shadow-2xl flex flex-col max-h-[85vh]">
+      <label class="block text-sm font-bold text-slate-300 mb-4 flex-shrink-0">How many players?</label>
+      <div class="flex items-center justify-center gap-4 mb-4 flex-shrink-0">
+        <button onclick="changePlayerCount(-1)" class="bg-slate-700 hover:bg-slate-600 w-12 h-12 rounded-full font-bold text-2xl transition shadow">-</button>
         <span id="player-count-display" class="text-4xl font-bold w-12">3</span>
-        <button onclick="changePlayerCount(1)" class="bg-slate-700 hover:bg-slate-600 w-12 h-12 rounded-full font-bold text-2xl transition">+</button>
+        <button onclick="changePlayerCount(1)" class="bg-slate-700 hover:bg-slate-600 w-12 h-12 rounded-full font-bold text-2xl transition shadow">+</button>
       </div>
-      <button onclick="startGame()" class="w-full bg-emerald-600 hover:bg-emerald-500 py-4 rounded-xl font-bold text-white shadow-lg shadow-emerald-900/50 transition text-lg">
+
+      <!-- Dynamic Player Name Inputs -->
+      <div id="player-names-container" class="flex flex-col gap-3 mb-6 overflow-y-auto no-scrollbar text-left flex-grow p-1">
+        <!-- Injected via JS -->
+      </div>
+
+      <button onclick="startGame()" class="w-full bg-emerald-600 hover:bg-emerald-500 py-4 rounded-xl font-bold text-white shadow-lg shadow-emerald-900/50 transition text-lg flex-shrink-0 mt-auto">
         Start Game
       </button>
     </div>
   </div>
 
   <!-- MAIN GAME UI -->
-  <div id="game-ui" class="hidden">
+  <div id="game-ui" class="hidden flex flex-col h-full min-h-[90vh]">
     <header class="flex justify-between items-center mb-4 border-b border-slate-700 pb-4">
       <div>
-        <h1 class="text-xl font-bold text-emerald-400">Flip 7 Tracker</h1>
-        <p class="text-sm text-slate-400">Deck: <span id="cards-remaining">94</span>/94 left</p>
+        <h1 class="text-xl font-bold text-emerald-400 leading-tight">Flip 7 Tracker</h1>
+        <p class="text-sm text-slate-400">Draw Pile: <span id="cards-remaining">94</span> cards</p>
       </div>
-      <button onclick="reshuffleDeckButton()" class="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm font-semibold transition shadow">
-        Reshuffle
-      </button>
+      <div class="flex gap-2">
+        <button onclick="reshuffleDeckButton()" class="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-2 rounded-lg text-xs font-bold transition shadow whitespace-nowrap">
+          Shuffle Discards
+        </button>
+        <button onclick="newGame()" class="bg-rose-700 hover:bg-rose-600 text-white px-3 py-2 rounded-lg text-xs font-bold transition shadow whitespace-nowrap">
+          New Game
+        </button>
+      </div>
     </header>
 
     <!-- Player Status Bar -->
@@ -77,8 +88,8 @@
     </div>
 
     <!-- Controls -->
-    <div class="grid grid-cols-2 gap-4 mb-6">
-      <button id="stay-btn" onclick="stayAction()" class="bg-slate-700 hover:bg-slate-600 py-4 rounded-xl font-bold transition text-slate-200">
+    <div class="grid grid-cols-2 gap-4 mb-2 mt-auto">
+      <button id="stay-btn" onclick="stayAction()" class="bg-slate-700 hover:bg-slate-600 py-4 rounded-xl font-bold transition text-slate-200 shadow">
         Stay
       </button>
       <button id="draw-btn" onclick="document.getElementById('card-modal').classList.remove('hidden')" class="bg-emerald-600 hover:bg-emerald-500 py-4 rounded-xl font-bold text-white shadow-lg shadow-emerald-900/50 transition col-span-1 text-lg">
@@ -121,9 +132,14 @@
       </div>
     </div>
     
-    <button onclick="startNextRound()" class="w-full max-w-sm bg-indigo-600 hover:bg-indigo-500 py-4 rounded-xl font-bold text-white shadow-lg shadow-indigo-900/50 transition text-lg">
-      Start Next Round
-    </button>
+    <div class="flex flex-col gap-3 w-full max-w-sm">
+      <button onclick="startNextRound()" class="w-full bg-emerald-600 hover:bg-emerald-500 py-4 rounded-xl font-bold text-white shadow-lg shadow-emerald-900/50 transition text-lg">
+        Start Next Round
+      </button>
+      <button onclick="newGame()" class="w-full bg-rose-700 hover:bg-rose-600 py-3 rounded-xl font-bold text-white shadow shadow-rose-900/50 transition">
+        End Game & Start Fresh
+      </button>
+    </div>
   </div>
 
   <script>
@@ -138,8 +154,25 @@
     let players = [];
     let currentPlayerIndex = 0;
     
+    // Default fallback names
+    let playerNamesSetup = Array.from({length: 8}, (_, i) => `Player ${i + 1}`);
+    
     let turnStack = []; 
     let forcedDrawsLeft = 0;
+
+    // Run on startup to render initial input boxes
+    window.onload = () => renderPlayerNameInputs();
+
+    function renderPlayerNameInputs() {
+      const container = document.getElementById('player-names-container');
+      container.innerHTML = '';
+      for(let i = 0; i < playersCountSetting; i++) {
+        container.innerHTML += `
+          <input type="text" oninput="playerNamesSetup[${i}] = this.value" value="${playerNamesSetup[i]}" placeholder="Player ${i + 1}"
+            class="w-full bg-slate-900 text-white rounded-lg px-4 py-3 text-sm border border-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-inner transition">
+        `;
+      }
+    }
 
     function showToast(message) {
       const container = document.getElementById('toast-container');
@@ -147,7 +180,7 @@
       let bgClass = 'bg-slate-800 border-slate-600';
       if (message.includes('BUST!') || message.includes('None') || message.includes('No one else')) bgClass = 'bg-rose-700 border-rose-500';
       if (message.includes('PREVENTED') || message.includes('survived')) bgClass = 'bg-emerald-700 border-emerald-500';
-      if (message.includes('Action') || message.includes('Second Chance') || message.includes('FROZEN')) bgClass = 'bg-indigo-700 border-indigo-500';
+      if (message.includes('Action') || message.includes('Second Chance') || message.includes('FROZEN') || message.includes('yourself')) bgClass = 'bg-indigo-700 border-indigo-500';
 
       toast.className = `${bgClass} border text-white px-4 py-3 rounded-lg shadow-xl text-sm font-bold transform transition-all duration-300 translate-y-[-100%] opacity-0 text-center z-[100]`;
       toast.innerText = message;
@@ -163,12 +196,13 @@
     function changePlayerCount(delta) {
       playersCountSetting = Math.max(2, Math.min(8, playersCountSetting + delta));
       document.getElementById('player-count-display').innerText = playersCountSetting;
+      renderPlayerNameInputs();
     }
 
     function startGame() {
       players = Array.from({length: playersCountSetting}, (_, i) => ({
         id: i, 
-        name: `Player ${i + 1}`, 
+        name: playerNamesSetup[i].trim() || `Player ${i + 1}`, 
         hand: [], 
         secondChance: false,
         roundStatus: 'active', // active, stayed, busted, frozen
@@ -179,7 +213,6 @@
       updateUI();
     }
 
-    // This dynamically rebuilds the card grid every time the UI updates
     function renderCardModalGrids() {
       const numGrid = document.getElementById('number-grid');
       numGrid.innerHTML = '';
@@ -222,7 +255,7 @@
     }
 
     function handleDraw(value, type) {
-      if (deck[type + 's'][value] <= 0) return; // Prevent clicking disabled 0-count cards
+      if (deck[type + 's'][value] <= 0) return; 
       
       document.getElementById('card-modal').classList.add('hidden');
       let player = players[currentPlayerIndex];
@@ -249,19 +282,24 @@
         } 
         else if (value === 'Flip3') {
           deck.actions['Flip3']--;
-          let activeOpponents = players.filter(p => p.id !== currentPlayerIndex && p.roundStatus === 'active');
+          let activePlayers = players.filter(p => p.roundStatus === 'active');
           
-          if (activeOpponents.length === 0) {
+          if (activePlayers.length === 1) {
              showToast("No one else active! You must Flip Three yourself.");
              turnStack.push({ returnIndex: currentPlayerIndex, previousForcedDraws: forcedDrawsLeft });
              forcedDrawsLeft = 3;
              updateUI();
           } else {
-             openTargetModal("Flip Three!", "Who must draw 3 cards?", activeOpponents, (targetId) => {
+             openTargetModal("Flip Three!", "Who must draw 3 cards? (You can choose yourself)", activePlayers, (targetId) => {
                turnStack.push({ returnIndex: currentPlayerIndex, previousForcedDraws: forcedDrawsLeft });
                currentPlayerIndex = targetId;
                forcedDrawsLeft = 3;
-               showToast(`${players[targetId].name} is hijacked! Must draw 3.`);
+               
+               if (targetId === turnStack[turnStack.length - 1].returnIndex) {
+                 showToast("You targeted yourself! Must draw 3.");
+               } else {
+                 showToast(`${players[targetId].name} is hijacked! Must draw 3.`);
+               }
                updateUI(); 
              });
           }
@@ -294,7 +332,8 @@
             showToast(`BUST PREVENTED! Second Chance burned the duplicate ${value}.`);
             resolveDrawStep(); 
           } else {
-            showToast(`BUST! ${player.name} drew a duplicate ${value}. Hand cleared.`);
+            showToast(`BUST! ${player.name} drew a duplicate ${value}. Discarded.`);
+            // Dropping the hand clears it to discard (since it stays out of the deck math)
             player.hand = [];
             player.roundStatus = 'busted';
             
@@ -406,8 +445,7 @@
     }
 
     function startNextRound() {
-       deck = JSON.parse(JSON.stringify(DECK_TEMPLATE));
-       
+       // DO NOT reset the deck! It persists. Just clear the players.
        players.forEach(p => {
           p.hand = [];
           p.roundStatus = 'active';
@@ -421,7 +459,29 @@
        document.getElementById('tally-screen').classList.add('hidden');
        document.getElementById('game-ui').classList.remove('hidden');
        
-       showToast("New round started! Deck reshuffled.");
+       showToast("New round started! Discards carry over.");
+       updateUI();
+    }
+
+    function newGame() {
+       if(!confirm("Are you sure you want to end the game and reset all scores?")) return;
+       
+       deck = JSON.parse(JSON.stringify(DECK_TEMPLATE));
+       players.forEach(p => {
+          p.hand = [];
+          p.roundStatus = 'active';
+          p.secondChance = false;
+          p.totalScore = 0;
+       });
+       
+       currentPlayerIndex = 0;
+       turnStack = [];
+       forcedDrawsLeft = 0;
+       
+       document.getElementById('tally-screen').classList.add('hidden');
+       document.getElementById('game-ui').classList.remove('hidden');
+       
+       showToast("New Game Started! Deck fully reset.");
        updateUI();
     }
 
@@ -433,12 +493,13 @@
     }
 
     function reshuffleDeckButton() {
+      // Reconstructs deck from TEMPLATE, minus whatever is currently ACTIVE on the board
       deck = JSON.parse(JSON.stringify(DECK_TEMPLATE));
       players.forEach(p => {
         p.hand.forEach(card => deck[card.type + 's'][card.value]--);
         if (p.secondChance) deck.actions['SecondChance']--;
       });
-      showToast("Deck manually verified and reshuffled!");
+      showToast("Discard pile shuffled back into deck!");
       updateUI();
     }
 
@@ -462,7 +523,7 @@
     }
 
     function updateUI() {
-      // 1. Force the Modal to rebuild its exact counts
+      // Force Modal rebuild
       renderCardModalGrids();
 
       let player = players[currentPlayerIndex];
@@ -479,7 +540,7 @@
 
         return `
         <div class="flex-shrink-0 px-4 py-2 rounded-xl border ${bg} ${opacity}">
-          <span class="font-bold text-sm">${p.name}</span>
+          <span class="font-bold text-sm whitespace-nowrap">${p.name}</span>
           ${p.secondChance ? `<span class="ml-1 text-[10px] bg-amber-500 text-amber-950 px-1.5 py-0.5 rounded-full font-bold">SC</span>` : ''}
           <div class="text-[10px] mt-1 tracking-wide font-bold">${statusText}</div>
         </div>
