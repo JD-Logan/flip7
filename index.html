@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Flip 7 Tracker Pro</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    /* Hide scrollbar for status bar */
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+  </style>
+</head>
+<body class="bg-slate-900 text-slate-100 p-4 font-sans antialiased max-w-md mx-auto relative min-h-screen">
+
+  <!-- Toast Notification Container -->
+  <div id="toast-container" class="fixed top-4 left-1/2 -translate-x-1/2 z-[100] flex flex-col gap-2 pointer-events-none w-[90%] max-w-sm"></div>
+
+  <!-- SETUP SCREEN -->
+  <div id="setup-screen" class="absolute inset-0 z-50 bg-slate-900 flex flex-col items-center justify-center p-6">
+    <h1 class="text-4xl font-bold text-emerald-400 mb-2">Flip 7</h1>
+    <p class="text-slate-400 mb-8">Probability Tracker Engine</p>
+    
+    <div class="bg-slate-800 p-6 rounded-2xl w-full max-w-xs text-center border border-slate-700 shadow-2xl">
+      <label class="block text-sm font-bold text-slate-300 mb-4">How many players?</label>
+      <div class="flex items-center justify-center gap-4 mb-6">
+        <button onclick="changePlayerCount(-1)" class="bg-slate-700 hover:bg-slate-600 w-12 h-12 rounded-full font-bold text-2xl transition">-</button>
+        <span id="player-count-display" class="text-4xl font-bold w-12">3</span>
+        <button onclick="changePlayerCount(1)" class="bg-slate-700 hover:bg-slate-600 w-12 h-12 rounded-full font-bold text-2xl transition">+</button>
+      </div>
+      <button onclick="startGame()" class="w-full bg-emerald-600 hover:bg-emerald-500 py-4 rounded-xl font-bold text-white shadow-lg shadow-emerald-900/50 transition text-lg">
+        Start Game
+      </button>
+    </div>
+  </div>
+
+  <!-- MAIN GAME UI -->
+  <div id="game-ui" class="hidden">
+    <header class="flex justify-between items-center mb-4 border-b border-slate-700 pb-4">
+      <div>
+        <h1 class="text-xl font-bold text-emerald-400">Flip 7 Tracker</h1>
+        <p class="text-sm text-slate-400">Deck: <span id="cards-remaining">94</span>/94 left</p>
+      </div>
+      <button onclick="reshuffleDeck()" class="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm font-semibold transition shadow">
+        Reshuffle
+      </button>
+    </header>
+
+    <!-- Player Status Bar -->
+    <div class="flex gap-2 overflow-x-auto pb-2 mb-4 no-scrollbar" id="player-status-bar">
+      <!-- Player tabs injected here -->
+    </div>
+
+    <!-- Active Player Info -->
+    <div class="bg-slate-800 p-4 rounded-xl mb-6 shadow-lg border border-slate-700 transition-all duration-300" id="active-player-card">
+      <div class="flex justify-between items-center mb-2">
+        <h2 class="text-lg font-bold">
+          <span id="current-player-name" class="text-emerald-400">Player 1</span>'s Turn
+        </h2>
+        <span id="recommendation-badge" class="px-3 py-1 rounded-full text-[10px] sm:text-xs font-bold bg-slate-700 text-slate-300">AWAITING DRAW</span>
+      </div>
+      
+      <div class="grid grid-cols-2 gap-4 mt-4">
+        <div class="bg-slate-900 p-3 rounded-lg text-center shadow-inner border border-slate-800">
+          <p class="text-xs text-slate-400 mb-1">Bust Risk</p>
+          <p id="prob-bust" class="text-2xl font-mono font-bold text-emerald-400">0.0%</p>
+        </div>
+        <div class="bg-slate-900 p-3 rounded-lg text-center shadow-inner border border-slate-800">
+          <p class="text-xs text-slate-400 mb-1">Expected Value</p>
+          <p id="expected-value" class="text-2xl font-mono font-bold text-blue-400">+0.0</p>
+        </div>
+      </div>
+      
+      <div class="mt-4">
+        <div class="flex justify-between items-end mb-2">
+          <p class="text-xs text-slate-400">Active Cards (Tap to undo)</p>
+          <span id="forced-draw-indicator" class="hidden text-xs font-bold text-rose-100 bg-rose-600 px-2 py-1 rounded shadow animate-pulse">3 FORCED DRAWS LEFT</span>
+        </div>
+        <div id="active-cards" class="flex flex-wrap gap-2 min-h-[48px] bg-slate-900/50 p-2 rounded-lg border border-slate-700 border-dashed">
+          <!-- Active cards injected here -->
+        </div>
+      </div>
+    </div>
+
+    <!-- Controls -->
+    <div class="grid grid-cols-2 gap-4 mb-6">
+      <button id="stay-btn" onclick="stayAndNextPlayer()" class="bg-slate-700 hover:bg-slate-600 py-4 rounded-xl font-bold transition text-slate-200">
+        Stay / End Turn
+      </button>
+      <button id="draw-btn" onclick="document.getElementById('card-modal').classList.remove('hidden')" class="bg-emerald-600 hover:bg-emerald-500 py-4 rounded-xl font-bold text-white shadow-lg shadow-emerald-900/50 transition col-span-1 text-lg">
+        + Draw Card
+      </button>
+    </div>
+  </div>
+
+  <!-- DRAW CARD MODAL -->
+  <div id="card-modal" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-end sm:items-center justify-center z-[60]">
+    <div class="bg-slate-800 w-full sm:w-[400px] sm:rounded-2xl rounded-t-2xl p-5 max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-700">
+      <div class="flex justify-between items-center mb-6">
+        <h3 class="text-xl font-bold">Select Drawn Card</h3>
+        <button onclick="document.getElementById('card-modal').classList.add('hidden')" class="text-slate-400 text-3xl px-2 leading-none hover:text-white">&times;</button>
+      </div>
+      
+      <h4 class="text-sm font-bold text-slate-400 mb-3 tracking-wide uppercase">Numbers</h4>
+      <div class="grid grid-cols-4 gap-2 mb-8" id="number-grid"></div>
+
+      <h4 class="text-sm font-bold text-slate-400 mb-3 tracking-wide uppercase">Modifiers & Actions</h4>
+      <div class="grid grid-cols-3 gap-2" id="action-grid"></div>
+    </div>
+  </div>
+
+  <!-- TARGET SELECTION MODAL -->
+  <div id="target-modal" class="hidden fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center z-[70]">
+    <div class="bg-slate-800 w-[90%] max-w-sm rounded-2xl p-6 border border-slate-600 shadow-2xl">
+      <h3 id="target-modal-title" class="text-xl font-bold mb-2 text-center text-white">Select Target</h3>
+      <p id="target-modal-desc" class="text-sm text-slate-400 text-center mb-6">Who receives this card?</p>
+      <div id="target-list" class="flex flex-col gap-3">
+        <!-- Player buttons injected here -->
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // --- DATA STRUCTURES ---
+    const DECK_TEMPLATE = {
+      numbers: {0:1, 1:1, 2:2, 3:3, 4:4, 5:5, 6:6, 7:7, 8:8, 9:9, 10:10, 11:11, 12:12},
+      modifiers: {'+2':1, '+4':1, '+6':1, '+8':1, '+10':1, 'x2':1},
+      actions: {'Freeze':3, 'Flip3':3, 'SecondChance':3}
+    };
+
+    let deck = JSON.parse(JSON.stringify(DECK_TEMPLATE));
+    
+    // Player State
+    let playersCountSetting = 3;
+    let players = [];
+    let currentPlayerIndex = 0;
+    
+    // Interrupt State (Flip 3 logic)
+    let turnStack = []; 
+    let forcedDrawsLeft = 0;
+
+    // --- UI UTILITIES ---
+    function showToast(message) {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      
+      let bgClass = 'bg-slate-800 border-slate-600';
+      if (message.includes('BUST!') || message.includes('None')) bgClass = 'bg-rose-700 border-rose-500';
+      if (message.includes('PREVENTED') || message.includes('survived')) bgClass = 'bg-emerald-700 border-emerald-500';
+      if (message.includes('Second Chance') && !message.includes('PREVENTED')) bgClass = 'bg-indigo-700 border-indigo-500';
+
+      toast.className = `${bgClass} border text-white px-4 py-3 rounded-lg shadow-xl text-sm font-bold transform transition-all duration-300 translate-y-[-100%] opacity-0 text-center`;
+      toast.innerText = message;
+      
+      container.appendChild(toast);
+      
+      // Animate in
+      requestAnimationFrame(() => {
+        toast.classList.remove('translate-y-[-100%]', 'opacity-0');
+      });
+      
+      // Remove after 3s
+      setTimeout(() => {
+        toast.classList.add('opacity-0');
+        setTimeout(() => toast.remove(), 300);
+      }, 3000);
+    }
+
+    // --- SETUP LOGIC ---
+    function changePlayerCount(delta) {
+      playersCountSetting = Math.max(2, Math.min(8, playersCountSetting + delta));
+      document.getElementById('player-count-display').innerText = playersCountSetting;
+    }
+
+    function startGame() {
+      players = Array.from({length: playersCountSetting}, (_, i) => ({
+        id: i,
+        name: `Player ${i + 1}`,
+        hand: [],
+        secondChance: false
+      }));
+      
+      document.getElementById('setup-screen').classList.add('hidden');
+      document.getElementById('game-ui').classList.remove('hidden');
+      
+      initControls();
+      updateUI();
+    }
+
+    function initControls() {
+      const numGrid = document.getElementById('number-grid');
+      numGrid.innerHTML = '';
+      for(let i=0; i<=12; i++) {
+        numGrid.innerHTML += `<button onclick="handleDraw('${i}', 'number')" class="bg-slate-700 hover:bg-slate-600 py-3 rounded-lg font-bold text-xl transition">${i}</button>`;
+      }
+      
+      const actionsGrid = document.getElementById('action-grid');
+      actionsGrid.innerHTML = '';
+      Object.keys(deck.modifiers).forEach(m => {
+        actionsGrid.innerHTML += `<button onclick="handleDraw('${m}', 'modifier')" class="bg-blue-900 hover:bg-blue-800 py-3 rounded-lg font-bold text-sm text-blue-200 border border-blue-700 transition">${m}</button>`;
+      });
+      Object.keys(deck.actions).forEach(a => {
+        actionsGrid.innerHTML += `<button onclick="handleDraw('${a}', 'action')" class="bg-purple-900 hover:bg-purple-800 py-3 rounded-lg font-bold text-xs text-purple-200 border border-purple-700 transition">${a}</button>`;
+      });
+    }
+
+    // --- DRAW LOGIC ---
+    function handleDraw(value, type) {
+      if (deck[type + 's'][value] <= 0) {
+        showToast("None of those left in the deck!");
+        return;
+      }
+      
+      document.getElementById('card-modal').classList.add('hidden');
+      
+      let player = players[currentPlayerIndex];
+
+      if (type === 'action') {
+        if (value === 'SecondChance') {
+          deck.actions['SecondChance']--;
+          if (!player.secondChance) {
+            player.secondChance = true;
+            showToast(`${player.name} gets the Second Chance!`);
+            resolveDrawStep();
+          } else {
+            let eligible = players.filter(p => !p.secondChance);
+            if (eligible.length === 0) {
+              showToast("Everyone already has a Second Chance! Card discarded.");
+              resolveDrawStep();
+            } else {
+              openTargetModal("Pass Second Chance", "You already have one. Who gets this?", eligible, (targetId) => {
+                players[targetId].secondChance = true;
+                resolveDrawStep();
+              });
+              return; // Halt until modal resolves
+            }
+          }
+        } 
+        else if (value === 'Flip3') {
+          deck.actions['Flip3']--;
+          let opponents = players.filter(p => p.id !== currentPlayerIndex);
+          openTargetModal("Flip Three!", "Who must draw 3 cards?", opponents, (targetId) => {
+            // Hijack the turn
+            turnStack.push({
+              returnIndex: currentPlayerIndex,
+              previousForcedDraws: forcedDrawsLeft
+            });
+            currentPlayerIndex = targetId;
+            forcedDrawsLeft = 3;
+            // Update UI to show the hijack, but DO NOT advance turn yet
+            updateUI(); 
+          });
+          return;
+        }
+        else if (value === 'Freeze') {
+          deck.actions['Freeze']--;
+          showToast("Freeze drawn! (House rules apply)");
+          resolveDrawStep();
+        }
+      } 
+      else if (type === 'number') {
+        let activeNumbers = new Set(player.hand.filter(c => c.type === 'number').map(c => c.value));
+        deck.numbers[value]--;
+        
+        if (activeNumbers.has(value)) {
+          // BUST CONDITION
+          if (player.secondChance) {
+            player.secondChance = false;
+            showToast(`BUST PREVENTED! ${player.name}'s Second Chance burned the duplicate ${value}.`);
+            // Effectively treated as a safe draw, so we resolve and advance turn
+            resolveDrawStep();
+          } else {
+            showToast(`BUST! ${player.name} drew a duplicate ${value}. Hand cleared.`);
+            player.hand = [];
+            
+            // If they bust while under a Flip 3, control returns to the attacker immediately
+            if (turnStack.length > 0) {
+              let previousState = turnStack.pop();
+              currentPlayerIndex = previousState.returnIndex;
+              forcedDrawsLeft = previousState.previousForcedDraws;
+            } else {
+              forcedDrawsLeft = 0; 
+            }
+            advanceTurnLogic(); 
+          }
+        } else {
+          // SAFE NUMBER
+          player.hand.push({value, type});
+          resolveDrawStep();
+        }
+      } 
+      else if (type === 'modifier') {
+        deck.modifiers[value]--;
+        player.hand.push({value, type});
+        resolveDrawStep();
+      }
+    }
+
+    function resolveDrawStep() {
+      // Check if this action was taken as part of a Forced Draw (Flip 3)
+      if (forcedDrawsLeft > 0) {
+        forcedDrawsLeft--;
+        if (forcedDrawsLeft === 0) {
+          showToast(`${players[currentPlayerIndex].name} survived the Flip Three!`);
+          // Return control back to original player who played the Flip 3
+          let previousState = turnStack.pop();
+          currentPlayerIndex = previousState.returnIndex;
+          forcedDrawsLeft = previousState.previousForcedDraws;
+          // The Flip 3 was the original player's single action. Now it resolves, turn advances.
+          advanceTurnLogic();
+        } else {
+          updateUI(); // Wait for victim to take remaining forced draws
+        }
+      } else {
+        // Normal single action completed (Draw 1 card). Move to next player.
+        advanceTurnLogic();
+      }
+    }
+
+    // --- TURN MANAGEMENT ---
+    function stayAndNextPlayer() {
+      // "Stay" means wiping current hand (banking points conceptually) and taking your 1 action
+      players[currentPlayerIndex].hand = [];
+      advanceTurnLogic();
+    }
+
+    function advanceTurnLogic() {
+      // Clear stack failsafes just in case
+      turnStack = []; 
+      forcedDrawsLeft = 0;
+      // Advance to next player rotationally
+      currentPlayerIndex = (currentPlayerIndex + 1) % players.length;
+      updateUI();
+    }
+
+    function removeCard(playerIndex, handIndex) {
+      const card = players[playerIndex].hand[handIndex];
+      deck[card.type + 's'][card.value]++;
+      players[playerIndex].hand.splice(handIndex, 1);
+      updateUI();
+    }
+
+    function reshuffleDeck() {
+      deck = JSON.parse(JSON.stringify(DECK_TEMPLATE));
+      players.forEach(p => {
+        p.hand.forEach(card => deck[card.type + 's'][card.value]--);
+        if (p.secondChance) deck.actions['SecondChance']--;
+      });
+      showToast("Deck dynamically reshuffled!");
+      updateUI();
+    }
+
+    // --- MODAL UTILS ---
+    function openTargetModal(title, desc, targets, callback) {
+      document.getElementById('target-modal-title').innerText = title;
+      document.getElementById('target-modal-desc').innerText = desc;
+      
+      const list = document.getElementById('target-list');
+      list.innerHTML = '';
+      
+      targets.forEach(target => {
+        const btn = document.createElement('button');
+        btn.className = "w-full bg-slate-700 hover:bg-indigo-600 text-white font-bold py-4 rounded-xl transition text-lg";
+        btn.innerText = target.name;
+        btn.onclick = () => {
+          document.getElementById('target-modal').classList.add('hidden');
+          callback(target.id);
+        };
+        list.appendChild(btn);
+      });
+      
+      document.getElementById('target-modal').classList.remove('hidden');
+    }
+
+    // --- UI RENDERER ---
+    function updateUI() {
+      let player = players[currentPlayerIndex];
+
+      // 1. Render Top Player Bar
+      const statusBar = document.getElementById('player-status-bar');
+      statusBar.innerHTML = players.map((p, i) => `
+        <div class="flex-shrink-0 px-4 py-2 rounded-xl border ${i === currentPlayerIndex ? 'bg-emerald-900/40 border-emerald-500 text-emerald-100 shadow-md scale-105 transition-transform' : 'bg-slate-800 border-slate-700 text-slate-400 opacity-70'}">
+          <span class="font-bold text-sm">${p.name}</span>
+          ${p.secondChance ? `<span class="ml-1 text-[10px] bg-amber-500 text-amber-950 px-1.5 py-0.5 rounded-full font-bold">SC</span>` : ''}
+          <div class="text-[11px] mt-1 tracking-wide">${p.hand.length} CARDS</div>
+        </div>
+      `).join('');
+
+      // 2. Active Player UI
+      document.getElementById('current-player-name').innerText = player.name;
+      
+      const container = document.getElementById('active-cards');
+      if (player.hand.length === 0) {
+        container.innerHTML = '<span class="text-slate-500 text-sm italic py-2 px-1">Table is empty</span>';
+      } else {
+        container.innerHTML = player.hand.map((c, i) => 
+          `<span onclick="removeCard(${currentPlayerIndex}, ${i})" class="inline-flex items-center justify-center min-w-[36px] h-9 px-3 rounded-lg text-sm font-bold cursor-pointer shadow-sm transition transform hover:scale-105 active:scale-95 ${c.type === 'number' ? 'bg-slate-200 text-slate-900 hover:bg-white' : 'bg-indigo-500 text-white hover:bg-indigo-400'}">${c.value} &times;</span>`
+        ).join('');
+      }
+
+      // 3. Handle Forced Draw UI changes
+      const stayBtn = document.getElementById('stay-btn');
+      const drawBtn = document.getElementById('draw-btn');
+      const forcedIndicator = document.getElementById('forced-draw-indicator');
+      const activeCardFrame = document.getElementById('active-player-card');
+
+      if (forcedDrawsLeft > 0) {
+        stayBtn.classList.add('hidden');
+        drawBtn.classList.remove('col-span-1');
+        drawBtn.classList.add('col-span-2');
+        drawBtn.innerText = `Force Draw (${forcedDrawsLeft} left)`;
+        drawBtn.classList.replace('bg-emerald-600', 'bg-rose-600');
+        drawBtn.classList.replace('hover:bg-emerald-500', 'hover:bg-rose-500');
+        drawBtn.classList.replace('shadow-emerald-900/50', 'shadow-rose-900/50');
+        activeCardFrame.classList.replace('border-slate-700', 'border-rose-500');
+        forcedIndicator.classList.remove('hidden');
+        forcedIndicator.innerText = `${forcedDrawsLeft} FORCED DRAWS LEFT`;
+      } else {
+        stayBtn.classList.remove('hidden');
+        drawBtn.classList.add('col-span-1');
+        drawBtn.classList.remove('col-span-2');
+        drawBtn.innerText = "+ Draw Card";
+        drawBtn.classList.replace('bg-rose-600', 'bg-emerald-600');
+        drawBtn.classList.replace('hover:bg-rose-500', 'hover:bg-emerald-500');
+        drawBtn.classList.replace('shadow-rose-900/50', 'shadow-emerald-900/50');
+        activeCardFrame.classList.replace('border-rose-500', 'border-slate-700');
+        forcedIndicator.classList.add('hidden');
+      }
+
+      // 4. Math & Probabilities
+      let totalCards = 0;
+      let bustCardsRemaining = 0;
+      let currentScore = 0;
+      let multiplier = 1;
+      const activeNumbers = new Set(player.hand.filter(c => c.type === 'number').map(c => c.value));
+
+      Object.entries(deck.numbers).forEach(([val, count]) => {
+        totalCards += count;
+        if (activeNumbers.has(val)) bustCardsRemaining += count;
+      });
+      Object.values(deck.modifiers).forEach(count => totalCards += count);
+      Object.values(deck.actions).forEach(count => totalCards += count);
+
+      player.hand.forEach(c => {
+        if (c.type === 'number') currentScore += parseInt(c.value);
+        if (c.type === 'modifier') {
+          if (c.value === 'x2') multiplier = 2;
+          else currentScore += parseInt(c.value.replace('+',''));
+        }
+      });
+      currentScore *= multiplier;
+
+      let probBust = player.secondChance ? 0 : (totalCards > 0 ? (bustCardsRemaining / totalCards) : 0);
+      
+      let ev = 0;
+      if (totalCards > 0 && !player.secondChance) {
+        let safeDraws = totalCards - bustCardsRemaining;
+        ev = ((safeDraws / totalCards) * (currentScore + 6)) - ((bustCardsRemaining / totalCards) * currentScore); 
+      } else if (player.secondChance) {
+        ev = currentScore + 6; // Guaranteed safe draw
+      }
+
+      document.getElementById('cards-remaining').innerText = totalCards;
+      
+      const probEl = document.getElementById('prob-bust');
+      probEl.innerText = (probBust * 100).toFixed(1) + '%';
+      probEl.className = `text-2xl font-mono font-bold ${probBust >= 0.25 ? 'text-rose-500' : (probBust > 0.15 ? 'text-amber-400' : 'text-emerald-400')}`;
+      
+      document.getElementById('expected-value').innerText = (ev >= 0 ? '+' : '') + ev.toFixed(1);
+
+      // 5. Badge Recommendation
+      const badge = document.getElementById('recommendation-badge');
+      if (forcedDrawsLeft > 0) {
+        badge.innerText = "FORCED DRAW";
+        badge.className = "px-3 py-1 rounded-full text-[10px] font-bold bg-rose-500 text-white animate-pulse tracking-wider";
+      } else if (player.hand.length === 0) {
+        badge.innerText = "NEW HAND";
+        badge.className = "px-3 py-1 rounded-full text-[10px] font-bold bg-slate-700 text-slate-300 tracking-wider";
+      } else if (player.secondChance || probBust < 0.15 || ev > currentScore) {
+        badge.innerText = "RECOMMEND: HIT";
+        badge.className = "px-3 py-1 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500 tracking-wider";
+      } else if (probBust >= 0.25 || ev <= 0) {
+        badge.innerText = "RECOMMEND: STAY";
+        badge.className = "px-3 py-1 rounded-full text-[10px] font-bold bg-rose-500/20 text-rose-400 border border-rose-500 tracking-wider";
+      } else {
+        badge.innerText = "CAUTION (SQUEEZE)";
+        badge.className = "px-3 py-1 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500 tracking-wider";
+      }
+    }
+  </script>
+</body>
+</html>
