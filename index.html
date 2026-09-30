@@ -333,7 +333,6 @@
             resolveDrawStep(); 
           } else {
             showToast(`BUST! ${player.name} drew a duplicate ${value}. Discarded.`);
-            // Dropping the hand clears it to discard (since it stays out of the deck math)
             player.hand = [];
             player.roundStatus = 'busted';
             
@@ -445,21 +444,20 @@
     }
 
     function startNextRound() {
-       // DO NOT reset the deck! It persists. Just clear the players.
        players.forEach(p => {
           p.hand = [];
           p.roundStatus = 'active';
           p.secondChance = false;
        });
        
-       currentPlayerIndex = (currentPlayerIndex + 1) % players.length;
+       currentPlayerIndex = 0; // ALWAYS RESET TO PLAYER 1
        turnStack = [];
        forcedDrawsLeft = 0;
        
        document.getElementById('tally-screen').classList.add('hidden');
        document.getElementById('game-ui').classList.remove('hidden');
        
-       showToast("New round started! Discards carry over.");
+       showToast("New round started! Player 1 goes first.");
        updateUI();
     }
 
@@ -493,7 +491,6 @@
     }
 
     function reshuffleDeckButton() {
-      // Reconstructs deck from TEMPLATE, minus whatever is currently ACTIVE on the board
       deck = JSON.parse(JSON.stringify(DECK_TEMPLATE));
       players.forEach(p => {
         p.hand.forEach(card => deck[card.type + 's'][card.value]--);
