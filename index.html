@@ -40,17 +40,20 @@
 
   <!-- MAIN GAME UI -->
   <div id="game-ui" class="hidden flex flex-col h-full min-h-[90vh]">
-    <header class="flex justify-between items-center mb-4 border-b border-slate-700 pb-4">
-      <div>
+    <header class="flex justify-between items-center mb-4 border-b border-slate-700 pb-4 gap-2">
+      <div class="flex-shrink-0">
         <h1 class="text-xl font-bold text-emerald-400 leading-tight">Flip 7 Tracker</h1>
-        <p class="text-sm text-slate-400">Draw Pile: <span id="cards-remaining">94</span> cards</p>
+        <p class="text-sm text-slate-400">Pile: <span id="cards-remaining">94</span> cards</p>
       </div>
-      <div class="flex gap-2">
-        <button onclick="reshuffleDeckButton()" class="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-2 rounded-lg text-xs font-bold transition shadow whitespace-nowrap">
-          Shuffle Discards
+      <div class="flex flex-wrap justify-end gap-2">
+        <button onclick="undoAction()" class="bg-amber-600 hover:bg-amber-500 text-white px-3 py-2 rounded-lg text-xs font-bold transition shadow">
+          Undo
         </button>
-        <button onclick="newGame()" class="bg-rose-700 hover:bg-rose-600 text-white px-3 py-2 rounded-lg text-xs font-bold transition shadow whitespace-nowrap">
-          New Game
+        <button onclick="reshuffleDeckButton()" class="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-2 rounded-lg text-xs font-bold transition shadow">
+          Shuffle
+        </button>
+        <button onclick="newGame()" class="bg-rose-700 hover:bg-rose-600 text-white px-3 py-2 rounded-lg text-xs font-bold transition shadow">
+          Reset
         </button>
       </div>
     </header>
@@ -80,9 +83,16 @@
       
       <div class="mt-4">
         <div class="flex justify-between items-end mb-2">
-          <p class="text-xs text-slate-400">Active Cards (Tap to undo)</p>
+          <p class="text-xs text-slate-400">Active Cards (Tap to remove)</p>
           <span id="forced-draw-indicator" class="hidden text-xs font-bold text-rose-100 bg-rose-600 px-2 py-1 rounded shadow animate-pulse">3 FORCED DRAWS LEFT</span>
         </div>
+        
+        <!-- Banked Actions Area -->
+        <div id="banked-cards-container" class="mb-2 hidden bg-slate-900/60 p-2 rounded-lg border border-slate-700">
+          <p class="text-[10px] text-amber-400 font-bold uppercase mb-1 tracking-wider">Banked Actions (Resolves if you survive)</p>
+          <div id="banked-cards" class="flex flex-wrap gap-2"></div>
+        </div>
+        
         <div id="active-cards" class="flex flex-wrap gap-2 min-h-[48px] bg-slate-900/50 p-2 rounded-lg border border-slate-700 border-dashed"></div>
       </div>
     </div>
@@ -122,7 +132,7 @@
   </div>
 
   <!-- ROUND TALLY SCREEN -->
-  <div id="tally-screen" class="hidden absolute inset-0 z-[80] bg-slate-900 flex flex-col items-center justify-center p-6">
+  <div id="tally-screen" class="hidden absolute inset-0 z-[80] bg-slate-900 flex flex-col items-center justify-center p-6 overflow-y-auto">
     <h1 class="text-4xl font-bold text-emerald-400 mb-2">Round Over!</h1>
     <p class="text-slate-400 mb-6">Score Summary</p>
     
@@ -135,6 +145,9 @@
     <div class="flex flex-col gap-3 w-full max-w-sm">
       <button onclick="startNextRound()" class="w-full bg-emerald-600 hover:bg-emerald-500 py-4 rounded-xl font-bold text-white shadow-lg shadow-emerald-900/50 transition text-lg">
         Start Next Round
+      </button>
+      <button onclick="undoAction()" class="w-full bg-amber-600 hover:bg-amber-500 py-3 rounded-xl font-bold text-white shadow shadow-amber-900/50 transition">
+        Wait, Undo Last Action!
       </button>
       <button onclick="newGame()" class="w-full bg-rose-700 hover:bg-rose-600 py-3 rounded-xl font-bold text-white shadow shadow-rose-900/50 transition">
         End Game & Start Fresh
@@ -154,13 +167,14 @@
     let players = [];
     let currentPlayerIndex = 0;
     
-    // Default fallback names
     let playerNamesSetup = Array.from({length: 8}, (_, i) => `Player ${i + 1}`);
     
     let turnStack = []; 
     let forcedDrawsLeft = 0;
 
-    // Run on startup to render initial input boxes
+    // The Time Machine
+    let gameHistory = [];
+
     window.onload = () => renderPlayerNameInputs();
 
     function renderPlayerNameInputs() {
@@ -179,8 +193,8 @@
       const toast = document.createElement('div');
       let bgClass = 'bg-slate-800 border-slate-600';
       if (message.includes('BUST!') || message.includes('None') || message.includes('No one else')) bgClass = 'bg-rose-700 border-rose-500';
-      if (message.includes('PREVENTED') || message.includes('survived')) bgClass = 'bg-emerald-700 border-emerald-500';
-      if (message.includes('Action') || message.includes('Second Chance') || message.includes('FROZEN') || message.includes('yourself')) bgClass = 'bg-indigo-700 border-indigo-500';
+      if (message.includes('PREVENTED') || message.includes('survived') || message.includes('Undo')) bgClass = 'bg-emerald-700 border-emerald-500';
+      if (message.includes('Action') || message.includes('Second Chance') || message.includes('FROZEN') || message.includes('yourself') || message.includes('banked')) bgClass = 'bg-indigo-700 border-indigo-500';
 
       toast.className = `${bgClass} border text-white px-4 py-3 rounded-lg shadow-xl text-sm font-bold transform transition-all duration-300 translate-y-[-100%] opacity-0 text-center z-[100]`;
       toast.innerText = message;
@@ -191,6 +205,41 @@
         toast.classList.add('opacity-0');
         setTimeout(() => toast.remove(), 300);
       }, 3000);
+    }
+
+    // --- UNDO ENGINE ---
+    function saveState() {
+      if (gameHistory.length > 25) gameHistory.shift(); // Keep memory light
+      gameHistory.push({
+        deck: JSON.parse(JSON.stringify(deck)),
+        players: JSON.parse(JSON.stringify(players)),
+        currentPlayerIndex: currentPlayerIndex,
+        turnStack: JSON.parse(JSON.stringify(turnStack)),
+        forcedDrawsLeft: forcedDrawsLeft
+      });
+    }
+
+    function undoAction() {
+      if (gameHistory.length === 0) {
+        showToast("Nothing left to undo!");
+        return;
+      }
+      
+      let previousState = gameHistory.pop();
+      deck = previousState.deck;
+      players = previousState.players;
+      currentPlayerIndex = previousState.currentPlayerIndex;
+      turnStack = previousState.turnStack;
+      forcedDrawsLeft = previousState.forcedDrawsLeft;
+      
+      // Force close all modals and tally screens
+      document.getElementById('card-modal').classList.add('hidden');
+      document.getElementById('target-modal').classList.add('hidden');
+      document.getElementById('tally-screen').classList.add('hidden');
+      document.getElementById('game-ui').classList.remove('hidden');
+
+      showToast("Undo successful!");
+      updateUI();
     }
 
     function changePlayerCount(delta) {
@@ -204,10 +253,12 @@
         id: i, 
         name: playerNamesSetup[i].trim() || `Player ${i + 1}`, 
         hand: [], 
+        bankedActions: [],
         secondChance: false,
         roundStatus: 'active', // active, stayed, busted, frozen
         totalScore: 0
       }));
+      gameHistory = []; // Reset history
       document.getElementById('setup-screen').classList.add('hidden');
       document.getElementById('game-ui').classList.remove('hidden');
       updateUI();
@@ -257,6 +308,8 @@
     function handleDraw(value, type) {
       if (deck[type + 's'][value] <= 0) return; 
       
+      saveState(); // SAVE BEFORE MUTATION
+      
       document.getElementById('card-modal').classList.add('hidden');
       let player = players[currentPlayerIndex];
 
@@ -282,8 +335,14 @@
         } 
         else if (value === 'Flip3') {
           deck.actions['Flip3']--;
+          if (forcedDrawsLeft > 0) {
+              player.bankedActions.push('Flip3');
+              showToast(`Flip 3 banked until forced draws complete!`);
+              resolveDrawStep();
+              return;
+          }
+
           let activePlayers = players.filter(p => p.roundStatus === 'active');
-          
           if (activePlayers.length === 1) {
              showToast("No one else active! You must Flip Three yourself.");
              turnStack.push({ returnIndex: currentPlayerIndex, previousForcedDraws: forcedDrawsLeft });
@@ -306,8 +365,14 @@
         }
         else if (value === 'Freeze') {
           deck.actions['Freeze']--;
+          if (forcedDrawsLeft > 0) {
+              player.bankedActions.push('Freeze');
+              showToast(`Freeze banked until forced draws complete!`);
+              resolveDrawStep();
+              return;
+          }
+
           let activeOpponents = players.filter(p => p.id !== currentPlayerIndex && p.roundStatus === 'active');
-          
           if (activeOpponents.length === 0) {
               showToast("No one else active! You freeze yourself.");
               players[currentPlayerIndex].roundStatus = 'frozen';
@@ -334,17 +399,9 @@
           } else {
             showToast(`BUST! ${player.name} drew a duplicate ${value}. Discarded.`);
             player.hand = [];
+            player.bankedActions = []; 
             player.roundStatus = 'busted';
-            
-            if (turnStack.length > 0) {
-              let previousState = turnStack.pop();
-              currentPlayerIndex = previousState.returnIndex;
-              forcedDrawsLeft = previousState.previousForcedDraws;
-              advanceTurnLogic();
-            } else {
-              forcedDrawsLeft = 0; 
-              advanceTurnLogic(); 
-            }
+            popTurnStack(); 
           }
         } else {
           player.hand.push({value, type});
@@ -363,10 +420,12 @@
         forcedDrawsLeft--;
         if (forcedDrawsLeft === 0) {
           showToast(`${players[currentPlayerIndex].name} survived the Flip Three!`);
-          let previousState = turnStack.pop();
-          currentPlayerIndex = previousState.returnIndex; 
-          forcedDrawsLeft = previousState.previousForcedDraws;
-          advanceTurnLogic(); 
+          
+          if (players[currentPlayerIndex].bankedActions.length > 0) {
+              processBankedActions();
+          } else {
+              popTurnStack(); 
+          }
         } else {
           updateUI(); 
         }
@@ -375,7 +434,70 @@
       }
     }
 
+    function processBankedActions() {
+      let player = players[currentPlayerIndex];
+      if (!player.bankedActions || player.bankedActions.length === 0) {
+          popTurnStack();
+          return;
+      }
+      
+      let action = player.bankedActions.shift();
+      updateUI(); 
+
+      if (action === 'Flip3') {
+          let activePlayers = players.filter(p => p.roundStatus === 'active');
+          if (activePlayers.length === 1) {
+              showToast("Banked Flip3: No one else active! You must draw 3.");
+              turnStack.push({ returnIndex: currentPlayerIndex, previousForcedDraws: forcedDrawsLeft });
+              forcedDrawsLeft = 3;
+              updateUI();
+          } else {
+              openTargetModal("Banked Flip Three!", "Who must draw 3 cards?", activePlayers, (targetId) => {
+                  turnStack.push({ returnIndex: currentPlayerIndex, previousForcedDraws: forcedDrawsLeft });
+                  currentPlayerIndex = targetId;
+                  forcedDrawsLeft = 3;
+                  showToast(`${players[targetId].name} hijacked by a banked Flip 3!`);
+                  updateUI(); 
+              });
+          }
+      } else if (action === 'Freeze') {
+          let activeOpponents = players.filter(p => p.id !== currentPlayerIndex && p.roundStatus === 'active');
+          if (activeOpponents.length === 0) {
+              showToast("Banked Freeze: No one else active! You freeze yourself.");
+              players[currentPlayerIndex].roundStatus = 'frozen';
+              processBankedActions(); 
+          } else {
+              let activePlayers = players.filter(p => p.roundStatus === 'active');
+              openTargetModal("Banked Freeze!", "Choose an active player to freeze.", activePlayers, (targetId) => {
+                  players[targetId].roundStatus = 'frozen';
+                  showToast(`${players[targetId].name} was FROZEN by a banked card!`);
+                  processBankedActions();
+              });
+          }
+      }
+    }
+
+    function popTurnStack() {
+      if (turnStack.length > 0) {
+        let previousState = turnStack.pop();
+        currentPlayerIndex = previousState.returnIndex; 
+        forcedDrawsLeft = previousState.previousForcedDraws;
+        
+        if (forcedDrawsLeft === 0 && players[currentPlayerIndex].bankedActions.length > 0) {
+            processBankedActions();
+        } else if (forcedDrawsLeft === 0) {
+            advanceTurnLogic();
+        } else {
+            updateUI(); 
+        }
+      } else {
+        forcedDrawsLeft = 0;
+        advanceTurnLogic();
+      }
+    }
+
     function stayAction() {
+      saveState();
       players[currentPlayerIndex].roundStatus = 'stayed';
       showToast(`${players[currentPlayerIndex].name} banked their cards!`);
       advanceTurnLogic();
@@ -444,13 +566,15 @@
     }
 
     function startNextRound() {
+       saveState();
        players.forEach(p => {
           p.hand = [];
+          p.bankedActions = [];
           p.roundStatus = 'active';
           p.secondChance = false;
        });
        
-       currentPlayerIndex = 0; // ALWAYS RESET TO PLAYER 1
+       currentPlayerIndex = 0; 
        turnStack = [];
        forcedDrawsLeft = 0;
        
@@ -463,10 +587,12 @@
 
     function newGame() {
        if(!confirm("Are you sure you want to end the game and reset all scores?")) return;
+       saveState();
        
        deck = JSON.parse(JSON.stringify(DECK_TEMPLATE));
        players.forEach(p => {
           p.hand = [];
+          p.bankedActions = [];
           p.roundStatus = 'active';
           p.secondChance = false;
           p.totalScore = 0;
@@ -484,6 +610,7 @@
     }
 
     function removeCard(playerIndex, handIndex) {
+      saveState();
       const card = players[playerIndex].hand[handIndex];
       deck[card.type + 's'][card.value]++;
       players[playerIndex].hand.splice(handIndex, 1);
@@ -491,6 +618,7 @@
     }
 
     function reshuffleDeckButton() {
+      saveState();
       deck = JSON.parse(JSON.stringify(DECK_TEMPLATE));
       players.forEach(p => {
         p.hand.forEach(card => deck[card.type + 's'][card.value]--);
@@ -520,7 +648,6 @@
     }
 
     function updateUI() {
-      // Force Modal rebuild
       renderCardModalGrids();
 
       let player = players[currentPlayerIndex];
@@ -545,6 +672,18 @@
 
       document.getElementById('current-player-name').innerText = player.name;
       
+      const bankedContainer = document.getElementById('banked-cards-container');
+      const bankedCards = document.getElementById('banked-cards');
+      if (player.bankedActions && player.bankedActions.length > 0) {
+         bankedContainer.classList.remove('hidden');
+         bankedCards.innerHTML = player.bankedActions.map(a => 
+            `<span class="inline-block px-3 py-1 rounded bg-purple-600 text-purple-100 text-xs font-bold shadow-sm">${a}</span>`
+         ).join('');
+      } else {
+         bankedContainer.classList.add('hidden');
+         bankedCards.innerHTML = '';
+      }
+
       const container = document.getElementById('active-cards');
       if (player.hand.length === 0) {
         container.innerHTML = '<span class="text-slate-500 text-sm italic py-2 px-1">Table is empty</span>';
