@@ -238,7 +238,7 @@
     window.reshuffleDeckButton = reshuffleDeckButton;
     window.removeCard = removeCard;
 
-    // --- SAFETY SANITIZER (CRITICAL CRASH FIX) ---
+    // --- SAFETY SANITIZER ---
     function deepClone(obj) {
         return JSON.parse(JSON.stringify(obj));
     }
@@ -267,6 +267,48 @@
         toast.classList.add('opacity-0');
         setTimeout(() => toast.remove(), 300);
       }, 3000);
+    }
+
+    // --- RE-ADDED MISSING GRID GENERATOR ---
+    function renderCardModalGrids() {
+      const numGrid = document.getElementById('number-grid');
+      numGrid.innerHTML = '';
+      for(let i=0; i<=12; i++) {
+        let count = deck.numbers[i];
+        let opacityAttr = count === 0 ? 'opacity-30 cursor-not-allowed grayscale' : 'hover:bg-slate-600';
+        let clickAttr = count === 0 ? '' : `onclick="handleDraw('${i}', 'number')"`;
+        
+        numGrid.innerHTML += `
+          <button ${clickAttr} class="bg-slate-700 ${opacityAttr} pt-3 pb-2 rounded-lg font-bold text-xl transition flex flex-col items-center leading-none shadow-sm">
+            ${i}
+            <span class="text-[11px] text-slate-400 font-normal mt-1 block">x${count}</span>
+          </button>`;
+      }
+      
+      const actionsGrid = document.getElementById('action-grid');
+      actionsGrid.innerHTML = '';
+      Object.keys(deck.modifiers).forEach(m => {
+        let count = deck.modifiers[m];
+        let opacityAttr = count === 0 ? 'opacity-30 cursor-not-allowed grayscale' : 'hover:bg-blue-800';
+        let clickAttr = count === 0 ? '' : `onclick="handleDraw('${m}', 'modifier')"`;
+        
+        actionsGrid.innerHTML += `
+          <button ${clickAttr} class="bg-blue-900 ${opacityAttr} pt-3 pb-2 rounded-lg font-bold text-sm text-blue-100 border border-blue-700 transition flex flex-col items-center leading-none shadow-sm">
+            ${m}
+            <span class="text-[11px] text-blue-300 font-normal mt-1 block">x${count}</span>
+          </button>`;
+      });
+      Object.keys(deck.actions).forEach(a => {
+        let count = deck.actions[a];
+        let opacityAttr = count === 0 ? 'opacity-30 cursor-not-allowed grayscale' : 'hover:bg-purple-800';
+        let clickAttr = count === 0 ? '' : `onclick="handleDraw('${a}', 'action')"`;
+        
+        actionsGrid.innerHTML += `
+          <button ${clickAttr} class="bg-purple-900 ${opacityAttr} pt-3 pb-2 rounded-lg font-bold text-xs text-purple-100 border border-purple-700 transition flex flex-col items-center leading-none shadow-sm">
+            ${a}
+            <span class="text-[11px] text-purple-300 font-normal mt-1 block">x${count}</span>
+          </button>`;
+      });
     }
 
     // --- LOBBY SYSTEM ---
@@ -337,7 +379,6 @@
 
             let state = data.gameState || {};
             
-            // Reconstruct Deep Deck Objects robustly (prevents array mis-mapping)
             let defaultDeck = deepClone(DECK_TEMPLATE);
             deck = state.deck || defaultDeck;
             ['numbers', 'modifiers', 'actions'].forEach(cat => {
@@ -347,7 +388,6 @@
                 });
             });
 
-            // Reconstruct Array safely
             players = ensureArray(state.players);
             players.forEach(p => {
                p.hand = ensureArray(p.hand);
@@ -381,14 +421,14 @@
               document.getElementById('lobby-screen').classList.add('hidden');
               document.getElementById('tally-screen').classList.add('hidden');
               document.getElementById('game-ui').classList.remove('hidden');
-              updateUI();
+              updateUI(); 
             } else if (data.status === 'tally') {
               document.getElementById('game-ui').classList.add('hidden');
               renderTallyScreen();
             }
         } catch(err) {
             console.error("Firebase Sync Exception:", err);
-            showToast("Sync repaired a background error.");
+            showToast("Sync Error: Refreshing required.");
         }
       });
     }
@@ -665,7 +705,6 @@
          return;
       }
 
-      // Find next active player
       let originalIndex = currentPlayerIndex;
       do {
         currentPlayerIndex = (currentPlayerIndex + 1) % players.length;
@@ -678,7 +717,6 @@
        if(!isHost) return showToast("Only the host can start the next round.");
        backupStateBeforeAction();
        
-       // Tally scores permanently before clearing hands
        players.forEach(p => {
           p.totalScore += calculatePlayerScore(p);
           p.hand = [];
@@ -737,7 +775,6 @@
       broadcastAction("Discards shuffled back into the deck!");
     }
 
-    // --- UTILS & UI RENDERING ---
     function openTargetModal(title, desc, targetOptions, callback) {
       document.getElementById('target-modal-title').innerText = title;
       document.getElementById('target-modal-desc').innerText = desc;
@@ -760,18 +797,18 @@
 
     function updateUI() {
       try {
-          renderCardModalGrids();
+          renderCardModalGrids(); 
           
           let player = players[currentPlayerIndex];
           if(!player) return; 
           
           let amIActivePlayer = isMyTurn();
 
-          // 1. Top Horizon Status Bar
           const statusBar = document.getElementById('player-status-bar');
           statusBar.innerHTML = players.map((p, i) => {
             let opacity = p.roundStatus === 'active' ? 'opacity-100' : 'opacity-40';
             let bg = i === currentPlayerIndex ? 'bg-emerald-900/60 border-emerald-500 text-emerald-100 shadow-md scale-105 transition-transform' : 'bg-slate-800 border-slate-700 text-slate-400';
+            
             let statusText = `${p.hand.length} CARDS`;
             if (p.roundStatus === 'stayed') statusText = 'STAYED';
             if (p.roundStatus === 'busted') statusText = 'BUSTED';
@@ -786,7 +823,6 @@
             </div>
           `}).join('');
 
-          // 2. Active Player Center Stage
           document.getElementById('current-player-name').innerText = amIActivePlayer ? "Your" : player.name;
           document.getElementById('turn-suffix').innerText = amIActivePlayer ? " Turn" : "'s Turn";
           
@@ -814,7 +850,6 @@
             }).join('');
           }
 
-          // 3. Update "My Personal Board" dashboard
           let myPlayer = players.find(p => p.id === myPlayerId);
           if(myPlayer) {
              document.getElementById('my-score').innerText = calculatePlayerScore(myPlayer);
@@ -854,7 +889,6 @@
              }
           }
 
-          // 4. Update Controls
           const stayBtn = document.getElementById('stay-btn');
           const drawBtn = document.getElementById('draw-btn');
           const randomDrawBtn = document.getElementById('random-draw-btn');
@@ -894,7 +928,6 @@
             forcedIndicator.classList.add('hidden');
           }
 
-          // 5. Update Math
           let totalCards = 0;
           let bustCardsRemaining = 0;
           const activeNumbers = new Set(player.hand.filter(c => c && c.type === 'number').map(c => c.value));
