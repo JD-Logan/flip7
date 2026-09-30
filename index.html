@@ -3,43 +3,64 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Flip 7 Tracker & Game</title>
+  <title>Flip 7 Online</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     .no-scrollbar::-webkit-scrollbar { display: none; }
     .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
   </style>
 </head>
-<body class="bg-slate-900 text-slate-100 p-4 font-sans antialiased max-w-md mx-auto relative min-h-screen">
+<body class="bg-slate-900 text-slate-100 p-4 font-sans antialiased max-w-md mx-auto relative min-h-screen flex flex-col">
 
   <div id="toast-container" class="fixed top-4 left-1/2 -translate-x-1/2 z-[100] flex flex-col gap-2 pointer-events-none w-[90%] max-w-sm"></div>
 
-  <!-- SETUP SCREEN -->
-  <div id="setup-screen" class="absolute inset-0 z-50 bg-slate-900 flex flex-col items-center justify-center p-6">
-    <h1 class="text-4xl font-bold text-emerald-400 mb-2">Flip 7</h1>
-    <p class="text-slate-400 mb-6">Tracker & Digital Game Engine</p>
+  <!-- SCREEN 1: HOME (Host / Join) -->
+  <div id="home-screen" class="absolute inset-0 z-50 bg-slate-900 flex flex-col items-center justify-center p-6">
+    <h1 class="text-5xl font-bold text-emerald-400 mb-2 tracking-tight">Flip 7</h1>
+    <p class="text-slate-400 mb-8 font-semibold uppercase tracking-widest text-sm">Online Multiplayer</p>
     
-    <div class="bg-slate-800 p-6 rounded-2xl w-full max-w-sm text-center border border-slate-700 shadow-2xl flex flex-col max-h-[85vh]">
-      <label class="block text-sm font-bold text-slate-300 mb-4 flex-shrink-0">How many players?</label>
-      <div class="flex items-center justify-center gap-4 mb-4 flex-shrink-0">
-        <button onclick="changePlayerCount(-1)" class="bg-slate-700 hover:bg-slate-600 w-12 h-12 rounded-full font-bold text-2xl transition shadow">-</button>
-        <span id="player-count-display" class="text-4xl font-bold w-12">3</span>
-        <button onclick="changePlayerCount(1)" class="bg-slate-700 hover:bg-slate-600 w-12 h-12 rounded-full font-bold text-2xl transition shadow">+</button>
-      </div>
-
-      <!-- Dynamic Player Name Inputs -->
-      <div id="player-names-container" class="flex flex-col gap-3 mb-6 overflow-y-auto no-scrollbar text-left flex-grow p-1">
-        <!-- Injected via JS -->
-      </div>
-
-      <button onclick="startGame()" class="w-full bg-emerald-600 hover:bg-emerald-500 py-4 rounded-xl font-bold text-white shadow-lg shadow-emerald-900/50 transition text-lg flex-shrink-0 mt-auto">
-        Start Game
+    <div class="bg-slate-800 p-6 rounded-2xl w-full max-w-sm text-center border border-slate-700 shadow-2xl">
+      <label class="block text-sm font-bold text-slate-300 mb-2 text-left">Your Player Name</label>
+      <input type="text" id="my-name-input" placeholder="e.g. John" class="w-full bg-slate-900 text-white rounded-xl px-4 py-4 text-lg border border-slate-600 focus:outline-none focus:border-emerald-500 mb-6 text-center font-bold">
+      
+      <button onclick="hostGame()" class="w-full bg-emerald-600 hover:bg-emerald-500 py-4 rounded-xl font-bold text-white shadow-lg shadow-emerald-900/50 transition text-lg mb-4">
+        Host New Game
       </button>
+      
+      <div class="relative flex py-2 items-center mb-4">
+        <div class="flex-grow border-t border-slate-600"></div>
+        <span class="flex-shrink-0 mx-4 text-slate-500 font-bold text-sm">OR</span>
+        <div class="flex-grow border-t border-slate-600"></div>
+      </div>
+
+      <div class="flex gap-2">
+        <input type="text" id="join-code-input" placeholder="CODE" maxlength="4" class="w-1/2 bg-slate-900 text-white rounded-xl px-4 py-4 text-xl border border-slate-600 focus:outline-none focus:border-cyan-500 text-center font-bold uppercase tracking-widest">
+        <button onclick="joinGame()" class="w-1/2 bg-cyan-600 hover:bg-cyan-500 py-4 rounded-xl font-bold text-white shadow-lg shadow-cyan-900/50 transition text-lg">
+          Join
+        </button>
+      </div>
     </div>
   </div>
 
-  <!-- MAIN GAME UI -->
-  <div id="game-ui" class="hidden flex flex-col h-full min-h-[90vh]">
+  <!-- SCREEN 2: LOBBY -->
+  <div id="lobby-screen" class="hidden absolute inset-0 z-40 bg-slate-900 flex flex-col items-center justify-center p-6">
+    <h2 class="text-2xl font-bold text-slate-300 mb-2">Room Code:</h2>
+    <div id="display-room-code" class="text-6xl font-black text-emerald-400 tracking-widest mb-8 border-4 border-emerald-500/30 bg-emerald-900/20 px-8 py-4 rounded-3xl">ABCD</div>
+    
+    <div class="bg-slate-800 p-6 rounded-2xl w-full max-w-sm border border-slate-700 shadow-2xl flex flex-col max-h-[50vh]">
+      <h3 class="text-sm font-bold text-slate-400 mb-4 uppercase tracking-wider border-b border-slate-700 pb-2">Players Joined</h3>
+      <div id="lobby-players-list" class="flex flex-col gap-3 overflow-y-auto no-scrollbar mb-6 flex-grow">
+        <!-- Players injected here -->
+      </div>
+      <button id="start-game-btn" onclick="startGame()" class="hidden w-full bg-emerald-600 hover:bg-emerald-500 py-4 rounded-xl font-bold text-white shadow-lg shadow-emerald-900/50 transition text-lg mt-auto">
+        Start Game
+      </button>
+      <p id="waiting-host-msg" class="text-sm text-amber-400 font-bold text-center animate-pulse">Waiting for host to start...</p>
+    </div>
+  </div>
+
+  <!-- SCREEN 3: MAIN GAME UI -->
+  <div id="game-ui" class="hidden flex flex-col h-full min-h-[95vh] relative z-10">
     <header class="flex justify-between items-center mb-4 border-b border-slate-700 pb-4 gap-2">
       <div class="flex-shrink-0">
         <h1 class="text-xl font-bold text-emerald-400 leading-tight">Flip 7</h1>
@@ -52,20 +73,15 @@
         <button onclick="reshuffleDeckButton()" class="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-2 rounded-lg text-xs font-bold transition shadow">
           Shuffle
         </button>
-        <button onclick="newGame()" class="bg-rose-700 hover:bg-rose-600 text-white px-3 py-2 rounded-lg text-xs font-bold transition shadow">
-          Reset
-        </button>
       </div>
     </header>
 
-    <!-- Player Status Bar -->
     <div class="flex gap-2 overflow-x-auto pb-2 mb-4 no-scrollbar" id="player-status-bar"></div>
 
-    <!-- Active Player Info -->
-    <div class="bg-slate-800 p-4 rounded-xl mb-6 shadow-lg border border-slate-700 transition-all duration-300" id="active-player-card">
+    <div class="bg-slate-800 p-4 rounded-xl mb-4 shadow-lg border border-slate-700 transition-all duration-300 relative" id="active-player-card">
       <div class="flex justify-between items-center mb-2">
         <h2 class="text-lg font-bold">
-          <span id="current-player-name" class="text-emerald-400">Player 1</span>'s Turn
+          <span id="current-player-name" class="text-emerald-400">Player</span>'s Turn
         </h2>
         <span id="recommendation-badge" class="px-3 py-1 rounded-full text-[10px] sm:text-xs font-bold bg-slate-700 text-slate-300">AWAITING DRAW</span>
       </div>
@@ -83,13 +99,12 @@
       
       <div class="mt-4">
         <div class="flex justify-between items-end mb-2">
-          <p class="text-xs text-slate-400">Active Cards (Tap to remove)</p>
+          <p class="text-xs text-slate-400">Active Cards <span id="tap-undo-text">(Tap to remove)</span></p>
           <span id="forced-draw-indicator" class="hidden text-xs font-bold text-rose-100 bg-rose-600 px-2 py-1 rounded shadow animate-pulse">3 FORCED DRAWS LEFT</span>
         </div>
         
-        <!-- Banked Actions Area -->
         <div id="banked-cards-container" class="mb-2 hidden bg-slate-900/60 p-2 rounded-lg border border-slate-700">
-          <p class="text-[10px] text-amber-400 font-bold uppercase mb-1 tracking-wider">Banked Actions (Resolves if you survive)</p>
+          <p class="text-[10px] text-amber-400 font-bold uppercase mb-1 tracking-wider">Banked Actions (Resolves if survived)</p>
           <div id="banked-cards" class="flex flex-wrap gap-2"></div>
         </div>
         
@@ -98,14 +113,14 @@
     </div>
 
     <!-- Controls -->
-    <div class="grid grid-cols-2 gap-3 mb-2 mt-auto">
-      <button id="stay-btn" onclick="stayAction()" class="col-span-1 bg-slate-700 hover:bg-slate-600 py-3 rounded-xl font-bold transition text-slate-200 shadow">
+    <div class="grid grid-cols-2 gap-3 mt-auto">
+      <button id="stay-btn" onclick="stayAction()" class="col-span-1 bg-slate-700 hover:bg-slate-600 py-3 rounded-xl font-bold transition text-slate-200 shadow disabled:opacity-30 disabled:cursor-not-allowed">
         Stay
       </button>
-      <button id="draw-btn" onclick="document.getElementById('card-modal').classList.remove('hidden')" class="col-span-1 bg-emerald-600 hover:bg-emerald-500 py-3 rounded-xl font-bold text-white shadow-lg shadow-emerald-900/50 transition">
+      <button id="draw-btn" onclick="openManualDraw()" class="col-span-1 bg-emerald-600 hover:bg-emerald-500 py-3 rounded-xl font-bold text-white shadow-lg shadow-emerald-900/50 transition disabled:opacity-30 disabled:cursor-not-allowed">
         + Manual
       </button>
-      <button id="random-draw-btn" onclick="randomDraw()" class="col-span-2 bg-cyan-600 hover:bg-cyan-500 py-4 rounded-xl font-bold text-white shadow-lg shadow-cyan-900/50 transition text-lg flex items-center justify-center gap-2">
+      <button id="random-draw-btn" onclick="randomDraw()" class="col-span-2 bg-cyan-600 hover:bg-cyan-500 py-4 rounded-xl font-bold text-white shadow-lg shadow-cyan-900/50 transition text-lg flex items-center justify-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed">
         <span class="text-2xl leading-none mb-1">🎲</span> Auto Draw
       </button>
     </div>
@@ -140,9 +155,7 @@
     <p class="text-slate-400 mb-6">Score Summary</p>
     
     <div class="bg-slate-800 p-4 rounded-2xl w-full max-w-sm border border-slate-700 shadow-2xl mb-6">
-      <div id="tally-list" class="flex flex-col gap-3">
-        <!-- Tally injected here -->
-      </div>
+      <div id="tally-list" class="flex flex-col gap-3"></div>
     </div>
     
     <div class="flex flex-col gap-3 w-full max-w-sm">
@@ -158,206 +171,263 @@
     </div>
   </div>
 
-  <script>
+  <!-- FIREBASE MODULE & MULTIPLAYER LOGIC -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.4.0/firebase-app.js";
+    import { getDatabase, ref, set, get, onValue, update } from "https://www.gstatic.com/firebasejs/10.4.0/firebase-database.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyALWoV7rSda1UFJ1VfNe-RkfwzsZJ-vK60",
+      authDomain: "flip7-cb06e.firebaseapp.com",
+      databaseURL: "https://flip7-cb06e-default-rtdb.firebaseio.com",
+      projectId: "flip7-cb06e",
+      storageBucket: "flip7-cb06e.firebasestorage.app",
+      messagingSenderId: "72823137813",
+      appId: "1:72823137813:web:52101c2a69446b05e7501c"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
     const DECK_TEMPLATE = {
       numbers: {0:1, 1:1, 2:2, 3:3, 4:4, 5:5, 6:6, 7:7, 8:8, 9:9, 10:10, 11:11, 12:12},
       modifiers: {'+2':1, '+4':1, '+6':1, '+8':1, '+10':1, 'x2':1},
       actions: {'Freeze':3, 'Flip3':3, 'SecondChance':3}
     };
 
+    // Shared State Variables
     let deck = JSON.parse(JSON.stringify(DECK_TEMPLATE));
-    let playersCountSetting = 3;
     let players = [];
     let currentPlayerIndex = 0;
-    
-    let playerNamesSetup = Array.from({length: 8}, (_, i) => `Player ${i + 1}`);
-    
     let turnStack = []; 
     let forcedDrawsLeft = 0;
+    
+    // Local App Variables
+    let myPlayerId = 'usr_' + Math.random().toString(36).substr(2, 9);
+    let myName = "Player";
+    let isHost = false;
+    let currentRoomCode = "";
+    let lastActionId = 0;
+    let previousStateBackup = null; // 1-Step Multiplayer Undo
 
-    let gameHistory = [];
+    // Make functions globally accessible for HTML onclick handlers
+    window.hostGame = hostGame;
+    window.joinGame = joinGame;
+    window.startGame = startGame;
+    window.openManualDraw = openManualDraw;
+    window.handleDraw = handleDraw;
+    window.randomDraw = randomDraw;
+    window.stayAction = stayAction;
+    window.undoAction = undoAction;
+    window.startNextRound = startNextRound;
+    window.newGame = newGame;
+    window.reshuffleDeckButton = reshuffleDeckButton;
+    window.removeCard = removeCard;
 
-    window.onload = () => renderPlayerNameInputs();
-
-    function renderPlayerNameInputs() {
-      const container = document.getElementById('player-names-container');
-      container.innerHTML = '';
-      for(let i = 0; i < playersCountSetting; i++) {
-        container.innerHTML += `
-          <input type="text" oninput="playerNamesSetup[${i}] = this.value" value="${playerNamesSetup[i]}" placeholder="Player ${i + 1}"
-            class="w-full bg-slate-900 text-white rounded-lg px-4 py-3 text-sm border border-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-inner transition">
-        `;
-      }
-    }
-
-    function showToast(message) {
-      const container = document.getElementById('toast-container');
-      const toast = document.createElement('div');
-      let bgClass = 'bg-slate-800 border-slate-600';
-      if (message.includes('BUST!') || message.includes('None') || message.includes('No one else')) bgClass = 'bg-rose-700 border-rose-500';
-      if (message.includes('PREVENTED') || message.includes('survived') || message.includes('Undo')) bgClass = 'bg-emerald-700 border-emerald-500';
-      if (message.includes('Action') || message.includes('Second Chance') || message.includes('FROZEN') || message.includes('yourself') || message.includes('banked')) bgClass = 'bg-indigo-700 border-indigo-500';
-      if (message.includes('Drew:')) bgClass = 'bg-cyan-700 border-cyan-500'; // Special style for random draw
-
-      toast.className = `${bgClass} border text-white px-4 py-3 rounded-lg shadow-xl text-sm font-bold transform transition-all duration-300 translate-y-[-100%] opacity-0 text-center z-[100]`;
-      toast.innerText = message;
+    // --- LOBBY SYSTEM ---
+    function hostGame() {
+      myName = document.getElementById('my-name-input').value.trim() || "Host";
+      currentRoomCode = Math.random().toString(36).substr(2, 4).toUpperCase();
+      isHost = true;
       
-      container.appendChild(toast);
-      requestAnimationFrame(() => toast.classList.remove('translate-y-[-100%]', 'opacity-0'));
-      setTimeout(() => {
-        toast.classList.add('opacity-0');
-        setTimeout(() => toast.remove(), 300);
-      }, 3000);
+      let newPlayer = { id: myPlayerId, name: myName, hand: [], bankedActions: [], secondChance: false, roundStatus: 'active', totalScore: 0 };
+      
+      set(ref(db, `rooms/${currentRoomCode}`), {
+        status: 'lobby',
+        gameState: {
+          deck: JSON.parse(JSON.stringify(DECK_TEMPLATE)),
+          players: [newPlayer],
+          currentPlayerIndex: 0,
+          turnStack: [],
+          forcedDrawsLeft: 0,
+          lastAction: { msg: "Room created!", id: Date.now() },
+          previousState: null
+        }
+      });
+
+      document.getElementById('home-screen').classList.add('hidden');
+      document.getElementById('lobby-screen').classList.remove('hidden');
+      document.getElementById('display-room-code').innerText = currentRoomCode;
+      document.getElementById('start-game-btn').classList.remove('hidden');
+      document.getElementById('waiting-host-msg').classList.add('hidden');
+      
+      listenToRoom();
     }
 
-    function saveState() {
-      if (gameHistory.length > 25) gameHistory.shift(); 
-      gameHistory.push({
-        deck: JSON.parse(JSON.stringify(deck)),
-        players: JSON.parse(JSON.stringify(players)),
-        currentPlayerIndex: currentPlayerIndex,
-        turnStack: JSON.parse(JSON.stringify(turnStack)),
-        forcedDrawsLeft: forcedDrawsLeft
+    function joinGame() {
+      myName = document.getElementById('my-name-input').value.trim() || "Guest";
+      let code = document.getElementById('join-code-input').value.trim().toUpperCase();
+      
+      if(code.length !== 4) return alert("Enter a valid 4-letter code");
+
+      get(ref(db, `rooms/${code}`)).then(snapshot => {
+        if (snapshot.exists()) {
+          let data = snapshot.val();
+          if (data.status === 'playing') return alert("Game already in progress!");
+          
+          currentRoomCode = code;
+          isHost = false;
+          
+          let currentPlayers = data.gameState.players || [];
+          currentPlayers.push({ id: myPlayerId, name: myName, hand: [], bankedActions: [], secondChance: false, roundStatus: 'active', totalScore: 0 });
+          
+          update(ref(db, `rooms/${code}/gameState`), { players: currentPlayers });
+
+          document.getElementById('home-screen').classList.add('hidden');
+          document.getElementById('lobby-screen').classList.remove('hidden');
+          document.getElementById('display-room-code').innerText = currentRoomCode;
+          
+          listenToRoom();
+        } else {
+          alert("Room not found!");
+        }
       });
     }
 
-    function undoAction() {
-      if (gameHistory.length === 0) {
-        showToast("Nothing left to undo!");
-        return;
-      }
-      
-      let previousState = gameHistory.pop();
-      deck = previousState.deck;
-      players = previousState.players;
-      currentPlayerIndex = previousState.currentPlayerIndex;
-      turnStack = previousState.turnStack;
-      forcedDrawsLeft = previousState.forcedDrawsLeft;
-      
-      document.getElementById('card-modal').classList.add('hidden');
-      document.getElementById('target-modal').classList.add('hidden');
-      document.getElementById('tally-screen').classList.add('hidden');
-      document.getElementById('game-ui').classList.remove('hidden');
+    function listenToRoom() {
+      onValue(ref(db, `rooms/${currentRoomCode}`), (snapshot) => {
+        let data = snapshot.val();
+        if (!data) return; // Room closed
 
-      showToast("Undo successful!");
-      updateUI();
-    }
+        let state = data.gameState;
+        deck = state.deck || JSON.parse(JSON.stringify(DECK_TEMPLATE));
+        players = state.players || [];
+        currentPlayerIndex = state.currentPlayerIndex || 0;
+        turnStack = state.turnStack || [];
+        forcedDrawsLeft = state.forcedDrawsLeft || 0;
+        previousStateBackup = state.previousState || null;
 
-    function changePlayerCount(delta) {
-      playersCountSetting = Math.max(2, Math.min(8, playersCountSetting + delta));
-      document.getElementById('player-count-display').innerText = playersCountSetting;
-      renderPlayerNameInputs();
+        if (state.lastAction && state.lastAction.id !== lastActionId) {
+          lastActionId = state.lastAction.id;
+          showToast(state.lastAction.msg);
+        }
+
+        // Update Lobby UI if in lobby
+        if (data.status === 'lobby') {
+          const list = document.getElementById('lobby-players-list');
+          list.innerHTML = players.map(p => `
+            <div class="bg-slate-700 px-4 py-3 rounded-lg font-bold text-white shadow-inner flex justify-between">
+              <span>${p.name}</span>
+              ${p.id === players[0].id ? '<span class="text-xs text-amber-400 uppercase tracking-widest mt-1">Host</span>' : ''}
+            </div>
+          `).join('');
+        }
+
+        // Handle Screen Transitions
+        if (data.status === 'playing') {
+          document.getElementById('lobby-screen').classList.add('hidden');
+          document.getElementById('tally-screen').classList.add('hidden');
+          document.getElementById('game-ui').classList.remove('hidden');
+          updateUI();
+        } else if (data.status === 'tally') {
+          document.getElementById('game-ui').classList.add('hidden');
+          renderTallyScreen();
+        }
+      });
     }
 
     function startGame() {
-      players = Array.from({length: playersCountSetting}, (_, i) => ({
-        id: i, 
-        name: playerNamesSetup[i].trim() || `Player ${i + 1}`, 
-        hand: [], 
-        bankedActions: [],
-        secondChance: false,
-        roundStatus: 'active',
-        totalScore: 0
-      }));
-      gameHistory = []; 
-      document.getElementById('setup-screen').classList.add('hidden');
-      document.getElementById('game-ui').classList.remove('hidden');
-      updateUI();
+      if(!isHost) return;
+      update(ref(db, `rooms/${currentRoomCode}`), { status: 'playing' });
+      broadcastAction("Game Started! Player 1 goes first.");
     }
 
-    // --- RANDOM DRAW DIGITAL ENGINE ---
-    function randomDraw() {
-      let cardPool = [];
-      
-      Object.entries(deck.numbers).forEach(([val, count]) => {
-        for(let i=0; i<count; i++) cardPool.push({value: val, type: 'number'});
-      });
-      Object.entries(deck.modifiers).forEach(([val, count]) => {
-        for(let i=0; i<count; i++) cardPool.push({value: val, type: 'modifier'});
-      });
-      Object.entries(deck.actions).forEach(([val, count]) => {
-        for(let i=0; i<count; i++) cardPool.push({value: val, type: 'action'});
-      });
+    // --- SHARED STATE SYNC ---
+    function broadcastAction(msg) {
+      let currentStateClone = {
+        deck: JSON.parse(JSON.stringify(deck)),
+        players: JSON.parse(JSON.stringify(players)),
+        currentPlayerIndex,
+        turnStack: JSON.parse(JSON.stringify(turnStack)),
+        forcedDrawsLeft
+      };
 
-      if (cardPool.length === 0) {
-        showToast("The deck is completely empty! Reshuffle needed.");
-        return;
-      }
-
-      let randomIndex = Math.floor(Math.random() * cardPool.length);
-      let drawnCard = cardPool[randomIndex];
-
-      showToast(`🎲 Drew: ${drawnCard.value}`);
-      
-      // Directly pass it into our standard draw function which handles saving state and rules!
-      handleDraw(drawnCard.value, drawnCard.type);
-    }
-
-    function renderCardModalGrids() {
-      const numGrid = document.getElementById('number-grid');
-      numGrid.innerHTML = '';
-      for(let i=0; i<=12; i++) {
-        let count = deck.numbers[i];
-        let opacityAttr = count === 0 ? 'opacity-30 cursor-not-allowed grayscale' : 'hover:bg-slate-600';
-        let clickAttr = count === 0 ? '' : `onclick="handleDraw('${i}', 'number')"`;
-        
-        numGrid.innerHTML += `
-          <button ${clickAttr} class="bg-slate-700 ${opacityAttr} pt-3 pb-2 rounded-lg font-bold text-xl transition flex flex-col items-center leading-none shadow-sm">
-            ${i}
-            <span class="text-[11px] text-slate-400 font-normal mt-1 block">x${count}</span>
-          </button>`;
-      }
-      
-      const actionsGrid = document.getElementById('action-grid');
-      actionsGrid.innerHTML = '';
-      Object.keys(deck.modifiers).forEach(m => {
-        let count = deck.modifiers[m];
-        let opacityAttr = count === 0 ? 'opacity-30 cursor-not-allowed grayscale' : 'hover:bg-blue-800';
-        let clickAttr = count === 0 ? '' : `onclick="handleDraw('${m}', 'modifier')"`;
-        
-        actionsGrid.innerHTML += `
-          <button ${clickAttr} class="bg-blue-900 ${opacityAttr} pt-3 pb-2 rounded-lg font-bold text-sm text-blue-100 border border-blue-700 transition flex flex-col items-center leading-none shadow-sm">
-            ${m}
-            <span class="text-[11px] text-blue-300 font-normal mt-1 block">x${count}</span>
-          </button>`;
-      });
-      Object.keys(deck.actions).forEach(a => {
-        let count = deck.actions[a];
-        let opacityAttr = count === 0 ? 'opacity-30 cursor-not-allowed grayscale' : 'hover:bg-purple-800';
-        let clickAttr = count === 0 ? '' : `onclick="handleDraw('${a}', 'action')"`;
-        
-        actionsGrid.innerHTML += `
-          <button ${clickAttr} class="bg-purple-900 ${opacityAttr} pt-3 pb-2 rounded-lg font-bold text-xs text-purple-100 border border-purple-700 transition flex flex-col items-center leading-none shadow-sm">
-            ${a}
-            <span class="text-[11px] text-purple-300 font-normal mt-1 block">x${count}</span>
-          </button>`;
+      set(ref(db, `rooms/${currentRoomCode}/gameState`), {
+        deck, players, currentPlayerIndex, turnStack, forcedDrawsLeft,
+        lastAction: { msg: msg, id: Date.now() },
+        previousState: previousStateBackup // Carry it forward unless updated
       });
     }
 
-    function handleDraw(value, type) {
-      if (deck[type + 's'][value] <= 0) return; 
+    function backupStateBeforeAction() {
+      previousStateBackup = {
+        deck: JSON.parse(JSON.stringify(deck)),
+        players: JSON.parse(JSON.stringify(players)),
+        currentPlayerIndex,
+        turnStack: JSON.parse(JSON.stringify(turnStack)),
+        forcedDrawsLeft
+      };
+    }
+
+    function undoAction() {
+      if (!previousStateBackup) return showToast("Nothing left to undo!");
       
-      saveState(); 
+      deck = previousStateBackup.deck;
+      players = previousStateBackup.players;
+      currentPlayerIndex = previousStateBackup.currentPlayerIndex;
+      turnStack = previousStateBackup.turnStack;
+      forcedDrawsLeft = previousStateBackup.forcedDrawsLeft;
       
+      // Close local modals
       document.getElementById('card-modal').classList.add('hidden');
+      document.getElementById('target-modal').classList.add('hidden');
+      
+      // If we are undoing from tally, revert room status to playing
+      if(!document.getElementById('tally-screen').classList.contains('hidden')){
+         update(ref(db, `rooms/${currentRoomCode}`), { status: 'playing' });
+      }
+
+      broadcastAction(`${myName} used Undo!`);
+    }
+
+    // --- GAME ENGINE ---
+    function isMyTurn() {
+      if(players.length === 0) return false;
+      return players[currentPlayerIndex].id === myPlayerId;
+    }
+
+    function openManualDraw() {
+      if(!isMyTurn()) return;
+      document.getElementById('card-modal').classList.remove('hidden');
+    }
+
+    function randomDraw() {
+      if(!isMyTurn()) return;
+      let cardPool = [];
+      Object.entries(deck.numbers).forEach(([val, count]) => { for(let i=0; i<count; i++) cardPool.push({value: val, type: 'number'}); });
+      Object.entries(deck.modifiers).forEach(([val, count]) => { for(let i=0; i<count; i++) cardPool.push({value: val, type: 'modifier'}); });
+      Object.entries(deck.actions).forEach(([val, count]) => { for(let i=0; i<count; i++) cardPool.push({value: val, type: 'action'}); });
+
+      if (cardPool.length === 0) return showToast("The deck is completely empty! Reshuffle needed.");
+      
+      let drawn = cardPool[Math.floor(Math.random() * cardPool.length)];
+      handleDraw(drawn.value, drawn.type, true); // true = random draw flag
+    }
+
+    function handleDraw(value, type, isRandom = false) {
+      if(!isMyTurn()) return;
+      if(deck[type + 's'][value] <= 0) return; 
+      
+      backupStateBeforeAction();
+      document.getElementById('card-modal').classList.add('hidden');
+      
       let player = players[currentPlayerIndex];
+      let drawMsg = isRandom ? `🎲 ${player.name} auto-drew a ${value}` : `${player.name} drew a ${value}`;
 
       if (type === 'action') {
         if (value === 'SecondChance') {
           deck.actions['SecondChance']--;
           if (!player.secondChance) {
             player.secondChance = true;
-            showToast(`${player.name} gets the Second Chance!`);
-            resolveDrawStep(); 
+            resolveDrawStep(`${drawMsg} & kept the Second Chance!`); 
           } else {
             let eligible = players.filter(p => !p.secondChance && p.roundStatus === 'active');
             if (eligible.length === 0) {
-              showToast("Everyone active already has a Second Chance! Card discarded.");
-              resolveDrawStep();
+              resolveDrawStep(`${drawMsg} but everyone has one. Discarded!`);
             } else {
-              openTargetModal("Pass Second Chance", "You already have one. Who gets this?", eligible, (targetId) => {
-                players[targetId].secondChance = true;
-                resolveDrawStep();
+              openTargetModal("Pass Second Chance", "You already have one. Who gets this?", eligible, (targetIndex) => {
+                players[targetIndex].secondChance = true;
+                resolveDrawStep(`${player.name} gave a Second Chance to ${players[targetIndex].name}!`);
               });
             }
           }
@@ -366,29 +436,21 @@
           deck.actions['Flip3']--;
           if (forcedDrawsLeft > 0) {
               player.bankedActions.push('Flip3');
-              showToast(`Flip 3 banked until forced draws complete!`);
-              resolveDrawStep();
+              resolveDrawStep(`${drawMsg} & banked it!`);
               return;
           }
 
           let activePlayers = players.filter(p => p.roundStatus === 'active');
           if (activePlayers.length === 1) {
-             showToast("No one else active! You must Flip Three yourself.");
              turnStack.push({ returnIndex: currentPlayerIndex, previousForcedDraws: forcedDrawsLeft });
              forcedDrawsLeft = 3;
-             updateUI();
+             resolveDrawStep(`${drawMsg}. No one else active, hijacked themselves!`);
           } else {
-             openTargetModal("Flip Three!", "Who must draw 3 cards? (You can choose yourself)", activePlayers, (targetId) => {
+             openTargetModal("Flip Three!", "Who must draw 3 cards?", activePlayers, (targetIndex) => {
                turnStack.push({ returnIndex: currentPlayerIndex, previousForcedDraws: forcedDrawsLeft });
-               currentPlayerIndex = targetId;
+               currentPlayerIndex = targetIndex;
                forcedDrawsLeft = 3;
-               
-               if (targetId === turnStack[turnStack.length - 1].returnIndex) {
-                 showToast("You targeted yourself! Must draw 3.");
-               } else {
-                 showToast(`${players[targetId].name} is hijacked! Must draw 3.`);
-               }
-               updateUI(); 
+               resolveDrawStep(`${drawMsg} & hijacked ${players[targetIndex].name}!`);
              });
           }
         }
@@ -396,22 +458,19 @@
           deck.actions['Freeze']--;
           if (forcedDrawsLeft > 0) {
               player.bankedActions.push('Freeze');
-              showToast(`Freeze banked until forced draws complete!`);
-              resolveDrawStep();
+              resolveDrawStep(`${drawMsg} & banked it!`);
               return;
           }
 
-          let activeOpponents = players.filter(p => p.id !== currentPlayerIndex && p.roundStatus === 'active');
+          let activeOpponents = players.filter(p => p.id !== player.id && p.roundStatus === 'active');
           if (activeOpponents.length === 0) {
-              showToast("No one else active! You freeze yourself.");
-              players[currentPlayerIndex].roundStatus = 'frozen';
-              resolveDrawStep();
+              player.roundStatus = 'frozen';
+              resolveDrawStep(`${drawMsg}. No one else active, froze themselves!`);
           } else {
               let activePlayers = players.filter(p => p.roundStatus === 'active');
-              openTargetModal("Freeze!", "Choose an active player to freeze.", activePlayers, (targetId) => {
-                players[targetId].roundStatus = 'frozen';
-                showToast(`${players[targetId].name} was FROZEN! They can no longer draw.`);
-                resolveDrawStep();
+              openTargetModal("Freeze!", "Choose an active player to freeze.", activePlayers, (targetIndex) => {
+                players[targetIndex].roundStatus = 'frozen';
+                resolveDrawStep(`${drawMsg} & froze ${players[targetIndex].name}!`);
               });
           }
         }
@@ -423,123 +482,116 @@
         if (activeNumbers.has(value)) {
           if (player.secondChance) {
             player.secondChance = false;
-            showToast(`BUST PREVENTED! Second Chance burned the duplicate ${value}.`);
-            resolveDrawStep(); 
+            resolveDrawStep(`🛡️ ${drawMsg}. BUST PREVENTED by Second Chance!`); 
           } else {
-            showToast(`BUST! ${player.name} drew a duplicate ${value}. Discarded.`);
             player.hand = [];
             player.bankedActions = []; 
             player.roundStatus = 'busted';
-            popTurnStack(); 
+            popTurnStack(`${drawMsg} AND BUSTED!`); 
           }
         } else {
           player.hand.push({value, type});
-          resolveDrawStep();
+          resolveDrawStep(drawMsg);
         }
       } 
       else if (type === 'modifier') {
         deck.modifiers[value]--;
         player.hand.push({value, type});
-        resolveDrawStep();
+        resolveDrawStep(drawMsg);
       }
     }
 
-    function resolveDrawStep() {
+    function resolveDrawStep(actionMsg) {
       if (forcedDrawsLeft > 0) {
         forcedDrawsLeft--;
         if (forcedDrawsLeft === 0) {
-          showToast(`${players[currentPlayerIndex].name} survived the Flip Three!`);
-          
           if (players[currentPlayerIndex].bankedActions.length > 0) {
-              processBankedActions();
+              processBankedActions(`${players[currentPlayerIndex].name} survived the Flip 3!`);
           } else {
-              popTurnStack(); 
+              popTurnStack(`${players[currentPlayerIndex].name} survived the Flip 3!`); 
           }
         } else {
-          updateUI(); 
+          broadcastAction(actionMsg); 
         }
       } else {
-        advanceTurnLogic();
+        advanceTurnLogic(actionMsg);
       }
     }
 
-    function processBankedActions() {
+    function processBankedActions(precedingMsg = "") {
       let player = players[currentPlayerIndex];
       if (!player.bankedActions || player.bankedActions.length === 0) {
-          popTurnStack();
+          popTurnStack(precedingMsg);
           return;
       }
       
       let action = player.bankedActions.shift();
-      updateUI(); 
+      let msg = precedingMsg ? precedingMsg + " Unpacking Banked Card..." : "Unpacking Banked Card...";
 
       if (action === 'Flip3') {
           let activePlayers = players.filter(p => p.roundStatus === 'active');
           if (activePlayers.length === 1) {
-              showToast("Banked Flip3: No one else active! You must draw 3.");
               turnStack.push({ returnIndex: currentPlayerIndex, previousForcedDraws: forcedDrawsLeft });
               forcedDrawsLeft = 3;
-              updateUI();
+              broadcastAction(`Banked Flip3 hit themselves!`);
           } else {
-              openTargetModal("Banked Flip Three!", "Who must draw 3 cards?", activePlayers, (targetId) => {
+              openTargetModal("Banked Flip Three!", "Who must draw 3 cards?", activePlayers, (targetIndex) => {
                   turnStack.push({ returnIndex: currentPlayerIndex, previousForcedDraws: forcedDrawsLeft });
-                  currentPlayerIndex = targetId;
+                  currentPlayerIndex = targetIndex;
                   forcedDrawsLeft = 3;
-                  showToast(`${players[targetId].name} hijacked by a banked Flip 3!`);
-                  updateUI(); 
+                  broadcastAction(`Banked Flip3 unleashed on ${players[targetIndex].name}!`);
               });
           }
       } else if (action === 'Freeze') {
-          let activeOpponents = players.filter(p => p.id !== currentPlayerIndex && p.roundStatus === 'active');
+          let activeOpponents = players.filter(p => p.id !== player.id && p.roundStatus === 'active');
           if (activeOpponents.length === 0) {
-              showToast("Banked Freeze: No one else active! You freeze yourself.");
-              players[currentPlayerIndex].roundStatus = 'frozen';
-              processBankedActions(); 
+              player.roundStatus = 'frozen';
+              processBankedActions(`Banked Freeze froze themselves!`); 
           } else {
               let activePlayers = players.filter(p => p.roundStatus === 'active');
-              openTargetModal("Banked Freeze!", "Choose an active player to freeze.", activePlayers, (targetId) => {
-                  players[targetId].roundStatus = 'frozen';
-                  showToast(`${players[targetId].name} was FROZEN by a banked card!`);
-                  processBankedActions();
+              openTargetModal("Banked Freeze!", "Choose an active player to freeze.", activePlayers, (targetIndex) => {
+                  players[targetIndex].roundStatus = 'frozen';
+                  processBankedActions(`Banked Freeze froze ${players[targetIndex].name}!`);
               });
           }
       }
     }
 
-    function popTurnStack() {
+    function popTurnStack(msg) {
       if (turnStack.length > 0) {
         let previousState = turnStack.pop();
         currentPlayerIndex = previousState.returnIndex; 
         forcedDrawsLeft = previousState.previousForcedDraws;
         
         if (forcedDrawsLeft === 0 && players[currentPlayerIndex].bankedActions.length > 0) {
-            processBankedActions();
+            processBankedActions(msg);
         } else if (forcedDrawsLeft === 0) {
-            advanceTurnLogic();
+            advanceTurnLogic(msg);
         } else {
-            updateUI(); 
+            broadcastAction(msg); // Attack continues
         }
       } else {
         forcedDrawsLeft = 0;
-        advanceTurnLogic();
+        advanceTurnLogic(msg);
       }
     }
 
     function stayAction() {
-      saveState();
+      if(!isMyTurn()) return;
+      backupStateBeforeAction();
       players[currentPlayerIndex].roundStatus = 'stayed';
-      showToast(`${players[currentPlayerIndex].name} banked their cards!`);
-      advanceTurnLogic();
+      advanceTurnLogic(`${players[currentPlayerIndex].name} Banked their cards!`);
     }
 
-    function advanceTurnLogic() {
+    function advanceTurnLogic(msg) {
       turnStack = []; 
       forcedDrawsLeft = 0;
       
       let activeCount = players.filter(p => p.roundStatus === 'active').length;
-      
       if (activeCount === 0) {
-         triggerEndRound();
+         // Push state first, then tell DB to switch to tally view
+         broadcastAction(msg);
+         setTimeout(() => update(ref(db, `rooms/${currentRoomCode}`), { status: 'tally' }), 200);
          return;
       }
 
@@ -547,77 +599,28 @@
         currentPlayerIndex = (currentPlayerIndex + 1) % players.length;
       } while (players[currentPlayerIndex].roundStatus !== 'active');
       
-      updateUI();
-    }
-
-    function calculatePlayerScore(player) {
-       let score = 0;
-       let multiplier = 1;
-       player.hand.forEach(c => {
-         if (c.type === 'number') score += parseInt(c.value);
-         if (c.type === 'modifier') {
-           if (c.value === 'x2') multiplier = 2;
-           else score += parseInt(c.value.replace('+',''));
-         }
-       });
-       return score * multiplier;
-    }
-
-    function triggerEndRound() {
-       document.getElementById('game-ui').classList.add('hidden');
-       
-       const list = document.getElementById('tally-list');
-       list.innerHTML = '';
-       
-       players.forEach(p => {
-          let roundScore = calculatePlayerScore(p);
-          p.totalScore += roundScore;
-          
-          let statusBadge = '';
-          if (p.roundStatus === 'busted') statusBadge = '<span class="text-[10px] bg-rose-600 text-white px-2 py-0.5 rounded ml-2">BUSTED</span>';
-          else if (p.roundStatus === 'frozen') statusBadge = '<span class="text-[10px] bg-indigo-600 text-white px-2 py-0.5 rounded ml-2">FROZEN</span>';
-          else statusBadge = '<span class="text-[10px] bg-slate-600 text-white px-2 py-0.5 rounded ml-2">STAYED</span>';
-          
-          list.innerHTML += `
-             <div class="flex justify-between items-center bg-slate-700/50 p-3 rounded-lg border border-slate-600">
-                <div>
-                   <div class="font-bold text-slate-200">${p.name} ${statusBadge}</div>
-                   <div class="text-xs text-emerald-400 font-mono mt-1">+${roundScore} this round</div>
-                </div>
-                <div class="text-xl font-bold font-mono text-white">
-                   Total: ${p.totalScore}
-                </div>
-             </div>
-          `;
-       });
-       
-       document.getElementById('tally-screen').classList.remove('hidden');
+      broadcastAction(msg || "Turn Advanced.");
     }
 
     function startNextRound() {
-       saveState();
+       backupStateBeforeAction();
        players.forEach(p => {
           p.hand = [];
           p.bankedActions = [];
           p.roundStatus = 'active';
           p.secondChance = false;
        });
-       
        currentPlayerIndex = 0; 
        turnStack = [];
        forcedDrawsLeft = 0;
        
-       document.getElementById('tally-screen').classList.add('hidden');
-       document.getElementById('game-ui').classList.remove('hidden');
-       
-       showToast("New round started! Player 1 goes first.");
-       updateUI();
+       update(ref(db, `rooms/${currentRoomCode}`), { status: 'playing' });
+       broadcastAction("New Round Started! Player 1 goes first.");
     }
 
     function newGame() {
-       if(!confirm("Are you sure you want to end the game and reset all scores?")) return;
-       saveState();
-       
+       if(!confirm("End the game and reset all scores for everyone?")) return;
+       backupStateBeforeAction();
        deck = JSON.parse(JSON.stringify(DECK_TEMPLATE));
        players.forEach(p => {
           p.hand = [];
@@ -626,60 +629,65 @@
           p.secondChance = false;
           p.totalScore = 0;
        });
-       
        currentPlayerIndex = 0;
        turnStack = [];
        forcedDrawsLeft = 0;
        
-       document.getElementById('tally-screen').classList.add('hidden');
-       document.getElementById('game-ui').classList.remove('hidden');
-       
-       showToast("New Game Started! Deck fully reset.");
-       updateUI();
+       update(ref(db, `rooms/${currentRoomCode}`), { status: 'playing' });
+       broadcastAction("Game Hard Reset!");
     }
 
     function removeCard(playerIndex, handIndex) {
-      saveState();
+      if(!isMyTurn()) return;
+      backupStateBeforeAction();
       const card = players[playerIndex].hand[handIndex];
       deck[card.type + 's'][card.value]++;
       players[playerIndex].hand.splice(handIndex, 1);
-      updateUI();
+      broadcastAction(`${players[playerIndex].name} returned a ${card.value} to the deck.`);
     }
 
     function reshuffleDeckButton() {
-      saveState();
+      backupStateBeforeAction();
       deck = JSON.parse(JSON.stringify(DECK_TEMPLATE));
       players.forEach(p => {
         p.hand.forEach(card => deck[card.type + 's'][card.value]--);
         if (p.secondChance) deck.actions['SecondChance']--;
       });
-      showToast("Discard pile shuffled back into deck!");
-      updateUI();
+      broadcastAction("Discards shuffled back into the deck!");
     }
 
-    function openTargetModal(title, desc, targets, callback) {
+    // --- UTILS & UI RENDERING ---
+    function openTargetModal(title, desc, targetOptions, callback) {
       document.getElementById('target-modal-title').innerText = title;
       document.getElementById('target-modal-desc').innerText = desc;
       const list = document.getElementById('target-list');
       list.innerHTML = '';
       
-      targets.forEach(target => {
+      targetOptions.forEach(target => {
         const btn = document.createElement('button');
         btn.className = "w-full bg-slate-700 hover:bg-indigo-600 text-white font-bold py-4 rounded-xl transition text-lg";
         btn.innerText = target.name;
         btn.onclick = () => {
           document.getElementById('target-modal').classList.add('hidden');
-          callback(target.id);
+          // Find their global index in the main players array
+          let globalIdx = players.findIndex(p => p.id === target.id);
+          callback(globalIdx);
         };
         list.appendChild(btn);
       });
       document.getElementById('target-modal').classList.remove('hidden');
     }
 
+    function showToastMsg(msg) {
+        showToast(msg);
+    }
+
     function updateUI() {
       renderCardModalGrids();
-
+      let amIActivePlayer = isMyTurn();
       let player = players[currentPlayerIndex];
+      
+      if(!player) return;
 
       const statusBar = document.getElementById('player-status-bar');
       statusBar.innerHTML = players.map((p, i) => {
@@ -690,10 +698,11 @@
         if (p.roundStatus === 'stayed') statusText = 'STAYED';
         if (p.roundStatus === 'busted') statusText = 'BUSTED';
         if (p.roundStatus === 'frozen') statusText = 'FROZEN';
+        let meIndicator = p.id === myPlayerId ? '*(You)*' : '';
 
         return `
         <div class="flex-shrink-0 px-4 py-2 rounded-xl border ${bg} ${opacity}">
-          <span class="font-bold text-sm whitespace-nowrap">${p.name}</span>
+          <span class="font-bold text-sm whitespace-nowrap">${p.name} <span class="text-[10px] font-normal text-slate-300">${meIndicator}</span></span>
           ${p.secondChance ? `<span class="ml-1 text-[10px] bg-amber-500 text-amber-950 px-1.5 py-0.5 rounded-full font-bold">SC</span>` : ''}
           <div class="text-[10px] mt-1 tracking-wide font-bold">${statusText}</div>
         </div>
@@ -714,17 +723,27 @@
       }
 
       const container = document.getElementById('active-cards');
+      document.getElementById('tap-undo-text').style.display = amIActivePlayer ? 'inline' : 'none';
+
       if (player.hand.length === 0) {
         container.innerHTML = '<span class="text-slate-500 text-sm italic py-2 px-1">Table is empty</span>';
       } else {
-        container.innerHTML = player.hand.map((c, i) => 
-          `<span onclick="removeCard(${currentPlayerIndex}, ${i})" class="inline-flex items-center justify-center min-w-[36px] h-9 px-3 rounded-lg text-sm font-bold cursor-pointer shadow-sm transition transform hover:scale-105 active:scale-95 ${c.type === 'number' ? 'bg-slate-200 text-slate-900 hover:bg-white' : 'bg-indigo-500 text-white hover:bg-indigo-400'}">${c.value} &times;</span>`
-        ).join('');
+        container.innerHTML = player.hand.map((c, i) => {
+          let clickAttr = amIActivePlayer ? `onclick="removeCard(${currentPlayerIndex}, ${i})"` : '';
+          let hoverClass = amIActivePlayer ? (c.type === 'number' ? 'hover:bg-white cursor-pointer' : 'hover:bg-indigo-400 cursor-pointer') : 'cursor-default';
+          return `<span ${clickAttr} class="inline-flex items-center justify-center min-w-[36px] h-9 px-3 rounded-lg text-sm font-bold shadow-sm transition transform ${amIActivePlayer ? 'hover:scale-105 active:scale-95' : ''} ${c.type === 'number' ? `bg-slate-200 text-slate-900 ${hoverClass}` : `bg-indigo-500 text-white ${hoverClass}`}">${c.value} ${amIActivePlayer ? '&times;' : ''}</span>`;
+        }).join('');
       }
 
+      // Button Locks
       const stayBtn = document.getElementById('stay-btn');
       const drawBtn = document.getElementById('draw-btn');
       const randomDrawBtn = document.getElementById('random-draw-btn');
+      
+      stayBtn.disabled = !amIActivePlayer;
+      drawBtn.disabled = !amIActivePlayer;
+      randomDrawBtn.disabled = !amIActivePlayer;
+
       const forcedIndicator = document.getElementById('forced-draw-indicator');
       const activeCardFrame = document.getElementById('active-player-card');
 
@@ -734,15 +753,10 @@
         randomDrawBtn.classList.replace('col-span-2', 'col-span-1');
         
         drawBtn.innerText = `Manual (${forcedDrawsLeft})`;
-        randomDrawBtn.innerText = `Auto (${forcedDrawsLeft})`;
+        randomDrawBtn.innerHTML = `Auto (${forcedDrawsLeft})`;
         
-        drawBtn.classList.replace('bg-emerald-600', 'bg-rose-600');
-        drawBtn.classList.replace('hover:bg-emerald-500', 'hover:bg-rose-500');
-        drawBtn.classList.replace('shadow-emerald-900/50', 'shadow-rose-900/50');
-        
-        randomDrawBtn.classList.replace('bg-cyan-600', 'bg-rose-600');
-        randomDrawBtn.classList.replace('hover:bg-cyan-500', 'hover:bg-rose-500');
-        randomDrawBtn.classList.replace('shadow-cyan-900/50', 'shadow-rose-900/50');
+        drawBtn.className = drawBtn.className.replace(/bg-emerald-600|hover:bg-emerald-500|shadow-emerald-900\/50/g, '').trim() + " bg-rose-600 hover:bg-rose-500 shadow-rose-900/50";
+        randomDrawBtn.className = randomDrawBtn.className.replace(/bg-cyan-600|hover:bg-cyan-500|shadow-cyan-900\/50/g, '').trim() + " bg-rose-600 hover:bg-rose-500 shadow-rose-900/50";
         
         activeCardFrame.classList.replace('border-slate-700', 'border-rose-500');
         forcedIndicator.classList.remove('hidden');
@@ -754,18 +768,14 @@
         drawBtn.innerText = "+ Manual";
         randomDrawBtn.innerHTML = `<span class="text-2xl leading-none mb-1">🎲</span> Auto Draw`;
         
-        drawBtn.classList.replace('bg-rose-600', 'bg-emerald-600');
-        drawBtn.classList.replace('hover:bg-rose-500', 'hover:bg-emerald-500');
-        drawBtn.classList.replace('shadow-rose-900/50', 'shadow-emerald-900/50');
-        
-        randomDrawBtn.classList.replace('bg-rose-600', 'bg-cyan-600');
-        randomDrawBtn.classList.replace('hover:bg-rose-500', 'hover:bg-cyan-500');
-        randomDrawBtn.classList.replace('shadow-rose-900/50', 'shadow-cyan-900/50');
+        drawBtn.className = drawBtn.className.replace(/bg-rose-600|hover:bg-rose-500|shadow-rose-900\/50/g, '').trim() + " bg-emerald-600 hover:bg-emerald-500 shadow-emerald-900/50";
+        randomDrawBtn.className = randomDrawBtn.className.replace(/bg-rose-600|hover:bg-rose-500|shadow-rose-900\/50/g, '').trim() + " bg-cyan-600 hover:bg-cyan-500 shadow-cyan-900/50";
         
         activeCardFrame.classList.replace('border-rose-500', 'border-slate-700');
         forcedIndicator.classList.add('hidden');
       }
 
+      // Calculations
       let totalCards = 0;
       let bustCardsRemaining = 0;
       const activeNumbers = new Set(player.hand.filter(c => c.type === 'number').map(c => c.value));
@@ -785,7 +795,6 @@
       const probEl = document.getElementById('prob-bust');
       probEl.innerText = (probBust * 100).toFixed(1) + '%';
       probEl.className = `text-2xl font-mono font-bold ${probBust >= 0.25 ? 'text-rose-500' : (probBust > 0.15 ? 'text-amber-400' : 'text-emerald-400')}`;
-      
       document.getElementById('expected-value').innerText = currentScore;
 
       const badge = document.getElementById('recommendation-badge');
@@ -805,6 +814,36 @@
         badge.innerText = "CAUTION (SQUEEZE)";
         badge.className = "px-3 py-1 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500 tracking-wider";
       }
+    }
+
+    function renderTallyScreen() {
+       const list = document.getElementById('tally-list');
+       list.innerHTML = '';
+       
+       players.forEach(p => {
+          let roundScore = calculatePlayerScore(p);
+          let newTotal = p.totalScore + roundScore;
+          
+          let statusBadge = '';
+          if (p.roundStatus === 'busted') statusBadge = '<span class="text-[10px] bg-rose-600 text-white px-2 py-0.5 rounded ml-2">BUSTED</span>';
+          else if (p.roundStatus === 'frozen') statusBadge = '<span class="text-[10px] bg-indigo-600 text-white px-2 py-0.5 rounded ml-2">FROZEN</span>';
+          else statusBadge = '<span class="text-[10px] bg-slate-600 text-white px-2 py-0.5 rounded ml-2">STAYED</span>';
+          
+          list.innerHTML += `
+             <div class="flex justify-between items-center bg-slate-700/50 p-3 rounded-lg border border-slate-600">
+                <div>
+                   <div class="font-bold text-slate-200">${p.name} ${statusBadge}</div>
+                   <div class="text-xs text-emerald-400 font-mono mt-1">+${roundScore} this round</div>
+                </div>
+                <div class="text-xl font-bold font-mono text-white">
+                   Total: ${newTotal}
+                </div>
+             </div>
+          `;
+          // Note: we don't apply the score to the true state yet, we do that in startNextRound so undo works cleanly.
+       });
+       
+       document.getElementById('tally-screen').classList.remove('hidden');
     }
   </script>
 </body>
