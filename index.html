@@ -223,6 +223,14 @@
     window.reshuffleDeckButton = reshuffleDeckButton;
     window.removeCard = removeCard;
 
+    // --- SAFETY SANITIZER (CRITICAL FIX) ---
+    // Forces Firebase objects back into Javascript Arrays so .push() and .map() never crash
+    function ensureArray(data) {
+        if (!data) return [];
+        if (Array.isArray(data)) return data;
+        return Object.values(data);
+    }
+
     // --- LOBBY SYSTEM ---
     function hostGame() {
       myName = document.getElementById('my-name-input').value.trim() || "Host";
@@ -267,7 +275,8 @@
           currentRoomCode = code;
           isHost = false;
           
-          let currentPlayers = data.gameState.players || [];
+          // Securely force array before pushing so we don't crash
+          let currentPlayers = ensureArray(data.gameState.players);
           currentPlayers.push({ id: myPlayerId, name: myName, hand: [], bankedActions: [], secondChance: false, roundStatus: 'active', totalScore: 0 });
           
           update(ref(db, `rooms/${code}/gameState`), { players: currentPlayers });
@@ -290,21 +299,25 @@
 
         let state = data.gameState;
         
-        // CRITICAL FIX: Firebase strips empty arrays. We must rebuild them immediately to prevent crashes.
+        // SECURE DECK: Restore 0 values that Firebase stripped out
         let defaultDeck = JSON.parse(JSON.stringify(DECK_TEMPLATE));
         deck = state.deck || defaultDeck;
-        deck.numbers = deck.numbers || defaultDeck.numbers;
-        deck.modifiers = deck.modifiers || defaultDeck.modifiers;
-        deck.actions = deck.actions || defaultDeck.actions;
+        ['numbers', 'modifiers', 'actions'].forEach(cat => {
+            deck[cat] = deck[cat] || {};
+            Object.keys(defaultDeck[cat]).forEach(k => {
+                if (deck[cat][k] === undefined) deck[cat][k] = 0;
+            });
+        });
 
-        players = state.players || [];
+        // SECURE ARRAYS: Force Firebase objects back into Arrays
+        players = ensureArray(state.players);
         players.forEach(p => {
-           p.hand = p.hand || [];
-           p.bankedActions = p.bankedActions || [];
+           p.hand = ensureArray(p.hand);
+           p.bankedActions = ensureArray(p.bankedActions);
         });
 
         currentPlayerIndex = state.currentPlayerIndex || 0;
-        turnStack = state.turnStack || [];
+        turnStack = ensureArray(state.turnStack);
         forcedDrawsLeft = state.forcedDrawsLeft || 0;
         previousStateBackup = state.previousState || null;
 
@@ -337,13 +350,23 @@
 
     function startGame() {
       if(!isHost) return;
-      update(ref(db, `rooms/${currentRoomCode}`), { status: 'playing' });
-      broadcastAction("Game Started! Player 1 goes first.");
+      
+      // Atomic Update: Change status and reset game state simultaneously
+      let stateUpdate = {
+        deck, players, currentPlayerIndex: 0, turnStack: [], forcedDrawsLeft: 0,
+        lastAction: { msg: "Game Started! Player 1 goes first.", id: Date.now() },
+        previousState: null
+      };
+      
+      update(ref(db, `rooms/${currentRoomCode}`), { 
+        status: 'playing',
+        gameState: stateUpdate
+      });
     }
 
     // --- SHARED STATE SYNC ---
     function broadcastAction(msg) {
-      set(ref(db, `rooms/${currentRoomCode}/gameState`), {
+      update(ref(db, `rooms/${currentRoomCode}/gameState`), {
         deck, players, currentPlayerIndex, turnStack, forcedDrawsLeft,
         lastAction: { msg: msg, id: Date.now() },
         previousState: previousStateBackup 
@@ -364,13 +387,13 @@
       if (!previousStateBackup) return showToast("Nothing left to undo!");
       
       deck = previousStateBackup.deck;
-      players = previousStateBackup.players || [];
+      players = ensureArray(previousStateBackup.players);
       players.forEach(p => {
-         p.hand = p.hand || [];
-         p.bankedActions = p.bankedActions || [];
+         p.hand = ensureArray(p.hand);
+         p.bankedActions = ensureArray(p.bankedActions);
       });
       currentPlayerIndex = previousStateBackup.currentPlayerIndex;
-      turnStack = previousStateBackup.turnStack || [];
+      turnStack = ensureArray(previousStateBackup.turnStack);
       forcedDrawsLeft = previousStateBackup.forcedDrawsLeft;
       
       document.getElementById('card-modal').classList.add('hidden');
@@ -662,7 +685,6 @@
       broadcastAction("Discards shuffled back into the deck!");
     }
 
-    // --- UTILS & UI RENDERING ---
     function openTargetModal(title, desc, targetOptions, callback) {
       document.getElementById('target-modal-title').innerText = title;
       document.getElementById('target-modal-desc').innerText = desc;
@@ -689,10 +711,14 @@
 
     function updateUI() {
       renderCardModalGrids();
-      let amIActivePlayer = isMyTurn();
-      let player = players[currentPlayerIndex];
       
-      if(!player) return;
+      let player = players[currentPlayerIndex];
+      if(!player) {
+         document.getElementById('current-player-name').innerText = "Loading...";
+         return; 
+      }
+      
+      let amIActivePlayer = isMyTurn();
 
       const statusBar = document.getElementById('player-status-bar');
       statusBar.innerHTML = players.map((p, i) => {
