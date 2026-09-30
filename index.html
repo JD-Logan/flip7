@@ -93,7 +93,7 @@
       </div>
       <div class="flex flex-wrap justify-end gap-2">
         <button onclick="undoAction()" class="bg-amber-600 hover:bg-amber-500 text-white px-3 py-2 rounded-lg text-xs font-bold transition shadow">
-          Undo
+          Undo Last
         </button>
         <button onclick="reshuffleDeckButton()" class="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-2 rounded-lg text-xs font-bold transition shadow">
           Shuffle
@@ -130,7 +130,7 @@
         </div>
         
         <div id="banked-cards-container" class="mb-2 hidden bg-slate-900/60 p-2 rounded-lg border border-slate-700">
-          <p class="text-[10px] text-amber-400 font-bold uppercase mb-1 tracking-wider">Banked Actions (Resolves if survived)</p>
+          <p class="text-[10px] text-amber-400 font-bold uppercase mb-1 tracking-wider">Banked Actions</p>
           <div id="banked-cards" class="flex flex-wrap gap-2"></div>
         </div>
         
@@ -170,7 +170,7 @@
   <div id="card-modal" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-end sm:items-center justify-center z-[60]">
     <div class="bg-slate-800 w-full sm:w-[400px] sm:rounded-2xl rounded-t-2xl p-5 max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-700">
       <div class="flex justify-between items-center mb-6">
-        <h3 class="text-xl font-bold">Select Drawn Card</h3>
+        <h3 class="text-xl font-bold" id="card-modal-title">Select Drawn Card</h3>
         <button onclick="document.getElementById('card-modal').classList.add('hidden')" class="text-slate-400 text-3xl px-2 leading-none hover:text-white">&times;</button>
       </div>
       <h4 class="text-sm font-bold text-slate-400 mb-3 tracking-wide uppercase">Numbers</h4>
@@ -250,7 +250,6 @@
     let lastActionId = 0;
     let previousStateBackup = null; 
 
-    // Bind exports
     window.hostGame = hostGame;
     window.joinGame = joinGame;
     window.startGame = startGame;
@@ -263,7 +262,6 @@
     window.newGame = newGame;
     window.reshuffleDeckButton = reshuffleDeckButton;
 
-    // --- SAFETY SANITIZER ---
     function deepClone(obj) {
         return JSON.parse(JSON.stringify(obj));
     }
@@ -278,7 +276,7 @@
       const container = document.getElementById('toast-container');
       const toast = document.createElement('div');
       let bgClass = 'bg-slate-800 border-slate-600';
-      if (message.includes('BUST!') || message.includes('None') || message.includes('No one else') || message.includes('Error')) bgClass = 'bg-rose-700 border-rose-500';
+      if (message.includes('BUST!') || message.includes('None') || message.includes('No one else') || message.includes('Error') || message.includes('empty')) bgClass = 'bg-rose-700 border-rose-500';
       if (message.includes('PREVENTED') || message.includes('survived') || message.includes('Undo')) bgClass = 'bg-emerald-700 border-emerald-500';
       if (message.includes('Action') || message.includes('Second Chance') || message.includes('FROZEN') || message.includes('yourself') || message.includes('banked')) bgClass = 'bg-indigo-700 border-indigo-500';
       if (message.includes('🎲')) bgClass = 'bg-cyan-700 border-cyan-500'; 
@@ -294,49 +292,56 @@
       }, 3000);
     }
 
-    // --- CARD MODAL GRID (Respects Count Setting) ---
+    // --- SMART CARD MODAL RENDERER ---
     function renderCardModalGrids() {
-      const numGrid = document.getElementById('number-grid');
-      numGrid.innerHTML = '';
-      for(let i=0; i<=12; i++) {
-        let count = deck.numbers[i];
-        let opacityAttr = count === 0 ? 'opacity-30 cursor-not-allowed grayscale' : 'hover:bg-slate-600';
-        let clickAttr = count === 0 ? '' : `onclick="handleDraw('${i}', 'number')"`;
-        let countSpan = gameSettings.showCount ? `<span class="text-[11px] text-slate-400 font-normal mt-1 block">x${count}</span>` : '';
-        
-        numGrid.innerHTML += `
-          <button ${clickAttr} class="bg-slate-700 ${opacityAttr} pt-3 pb-2 rounded-lg font-bold text-xl transition flex flex-col items-center leading-none shadow-sm">
-            ${i}
-            ${countSpan}
-          </button>`;
-      }
-      
-      const actionsGrid = document.getElementById('action-grid');
-      actionsGrid.innerHTML = '';
-      Object.keys(deck.modifiers).forEach(m => {
-        let count = deck.modifiers[m];
-        let opacityAttr = count === 0 ? 'opacity-30 cursor-not-allowed grayscale' : 'hover:bg-blue-800';
-        let clickAttr = count === 0 ? '' : `onclick="handleDraw('${m}', 'modifier')"`;
-        let countSpan = gameSettings.showCount ? `<span class="text-[11px] text-blue-300 font-normal mt-1 block">x${count}</span>` : '';
-        
-        actionsGrid.innerHTML += `
-          <button ${clickAttr} class="bg-blue-900 ${opacityAttr} pt-3 pb-2 rounded-lg font-bold text-sm text-blue-100 border border-blue-700 transition flex flex-col items-center leading-none shadow-sm">
-            ${m}
-            ${countSpan}
-          </button>`;
-      });
-      Object.keys(deck.actions).forEach(a => {
-        let count = deck.actions[a];
-        let opacityAttr = count === 0 ? 'opacity-30 cursor-not-allowed grayscale' : 'hover:bg-purple-800';
-        let clickAttr = count === 0 ? '' : `onclick="handleDraw('${a}', 'action')"`;
-        let countSpan = gameSettings.showCount ? `<span class="text-[11px] text-purple-300 font-normal mt-1 block">x${count}</span>` : '';
-        
-        actionsGrid.innerHTML += `
-          <button ${clickAttr} class="bg-purple-900 ${opacityAttr} pt-3 pb-2 rounded-lg font-bold text-xs text-purple-100 border border-purple-700 transition flex flex-col items-center leading-none shadow-sm">
-            ${a}
-            ${countSpan}
-          </button>`;
-      });
+        let amIActivePlayer = isMyTurn();
+        let canDraw = gameSettings.manualEntry && amIActivePlayer;
+
+        // Change Title based on mode
+        document.getElementById('card-modal-title').innerText = canDraw ? "Select Drawn Card" : "Deck Remaining Viewer";
+
+        const renderButton = (key, count, type, bgBase, hoverClass, textColor) => {
+            let opacityAttr = '';
+            let clickAttr = '';
+            let countSpan = gameSettings.showCount ? `<span class="text-[11px] ${textColor} opacity-80 font-normal mt-1 block">x${count}</span>` : '';
+
+            if (canDraw) {
+                if (gameSettings.showCount) {
+                    opacityAttr = count === 0 ? 'opacity-30 cursor-not-allowed grayscale' : `${hoverClass} active:scale-95 cursor-pointer`;
+                    clickAttr = count === 0 ? `onclick="showToast('Cannot draw — that card is empty!')"` : `onclick="handleDraw('${key}', '${type}')"`;
+                } else {
+                    opacityAttr = `${hoverClass} active:scale-95 cursor-pointer`; 
+                    clickAttr = `onclick="handleDraw('${key}', '${type}')"`;
+                }
+            } else {
+                if (gameSettings.showCount) {
+                    opacityAttr = count === 0 ? 'opacity-30 cursor-not-allowed grayscale' : 'cursor-default';
+                } else {
+                    opacityAttr = 'cursor-default';
+                }
+            }
+
+            return `
+              <button ${clickAttr} class="${bgBase} ${opacityAttr} pt-3 pb-2 rounded-lg font-bold transition flex flex-col items-center leading-none shadow-sm border border-black/20">
+                <span class="text-base">${key}</span>
+                ${countSpan}
+              </button>`;
+        };
+
+        const numGrid = document.getElementById('number-grid');
+        numGrid.innerHTML = '';
+        for(let i=0; i<=12; i++) {
+            numGrid.innerHTML += renderButton(i, deck.numbers[i], 'number', 'bg-slate-700 text-white', 'hover:bg-slate-600', 'text-slate-300');
+        }
+
+        const actionsGrid = document.getElementById('action-grid');
+        actionsGrid.innerHTML = '';
+        Object.keys(deck.modifiers).forEach(m => {
+            actionsGrid.innerHTML += renderButton(m, deck.modifiers[m], 'modifier', 'bg-blue-900 text-blue-100', 'hover:bg-blue-800', 'text-blue-300');
+        });
+        Object.keys(deck.actions).forEach(a => {
+            actionsGrid.innerHTML += renderButton(a, deck.actions[a], 'action', 'bg-purple-900 text-purple-100', 'hover:bg-purple-800', 'text-purple-300');
+        });
     }
 
     // --- LOBBY SYSTEM ---
@@ -419,7 +424,6 @@
 
             let state = data.gameState || {};
             
-            // Sync Room Rules
             gameSettings = state.settings || { autoDraw: true, manualEntry: true, showRisk: true, showCount: true };
             
             let defaultDeck = deepClone(DECK_TEMPLATE);
@@ -544,7 +548,7 @@
     }
 
     function openManualDraw() {
-      if(!isMyTurn()) return;
+      if (!gameSettings.manualEntry && !gameSettings.showCount) return; 
       document.getElementById('card-modal').classList.remove('hidden');
     }
 
@@ -563,7 +567,12 @@
 
     function handleDraw(value, type, isRandom = false) {
       if(!isMyTurn()) return;
-      if(deck[type + 's'][value] <= 0) return; 
+      if(deck[type + 's'][value] <= 0) {
+          if(!gameSettings.showCount) {
+             showToast(`Cannot draw ${value} — that card is empty!`);
+          }
+          return; 
+      }
       
       backupStateBeforeAction();
       document.getElementById('card-modal').classList.add('hidden');
@@ -811,7 +820,6 @@
       broadcastAction("Discards shuffled back into the deck!");
     }
 
-    // --- UTILS & UI RENDERING ---
     function openTargetModal(title, desc, targetOptions, callback) {
       document.getElementById('target-modal-title').innerText = title;
       document.getElementById('target-modal-desc').innerText = desc;
@@ -923,57 +931,89 @@
              }
           }
 
-          // DYNAMIC CONTROLS BASED ON HOST SETTINGS
+          // DYNAMIC CONTROLS LAYOUT
           const stayBtn = document.getElementById('stay-btn');
           const drawBtn = document.getElementById('draw-btn');
           const randomDrawBtn = document.getElementById('random-draw-btn');
           
-          stayBtn.disabled = !amIActivePlayer;
-          drawBtn.disabled = !amIActivePlayer;
-          randomDrawBtn.disabled = !amIActivePlayer;
-
           let manualOn = gameSettings.manualEntry;
           let autoOn = gameSettings.autoDraw;
+          let countOn = gameSettings.showCount;
 
-          if (manualOn && autoOn) {
+          stayBtn.disabled = !amIActivePlayer;
+
+          if (manualOn || countOn) {
               drawBtn.classList.remove('hidden');
-              randomDrawBtn.classList.remove('hidden');
-              drawBtn.classList.replace('col-span-2', 'col-span-1');
-              randomDrawBtn.classList.replace('col-span-2', 'col-span-1');
-          } else if (manualOn) {
-              drawBtn.classList.remove('hidden');
-              randomDrawBtn.classList.add('hidden');
-              drawBtn.classList.replace('col-span-1', 'col-span-2');
-          } else if (autoOn) {
+              drawBtn.disabled = false; 
+              
+              if (manualOn && amIActivePlayer) {
+                  drawBtn.innerText = forcedDrawsLeft > 0 ? `Manual (${forcedDrawsLeft})` : `+ Manual`;
+              } else {
+                  drawBtn.innerText = `🔍 View Deck`;
+              }
+          } else {
               drawBtn.classList.add('hidden');
-              randomDrawBtn.classList.remove('hidden');
-              randomDrawBtn.classList.replace('col-span-1', 'col-span-2');
           }
+
+          if (autoOn) {
+              randomDrawBtn.classList.remove('hidden');
+              randomDrawBtn.disabled = !amIActivePlayer;
+              if (forcedDrawsLeft > 0 && amIActivePlayer) {
+                  randomDrawBtn.innerHTML = `Auto (${forcedDrawsLeft})`;
+              } else {
+                  randomDrawBtn.innerHTML = `<span class="text-2xl leading-none mb-1">🎲</span> Auto`;
+              }
+          } else {
+              randomDrawBtn.classList.add('hidden');
+          }
+
+          stayBtn.className = stayBtn.className.replace(/col-span-[1-2]/g, '').replace('sm:col-span-1', '').trim();
+          drawBtn.className = drawBtn.className.replace(/col-span-[1-2]/g, '').trim();
+          randomDrawBtn.className = randomDrawBtn.className.replace(/col-span-[1-2]/g, '').trim();
+
+          drawBtn.classList.remove('bg-emerald-600', 'hover:bg-emerald-500', 'shadow-emerald-900/50', 'bg-rose-600', 'hover:bg-rose-500', 'shadow-rose-900/50');
+          randomDrawBtn.classList.remove('bg-cyan-600', 'hover:bg-cyan-500', 'shadow-cyan-900/50', 'bg-rose-600', 'hover:bg-rose-500', 'shadow-rose-900/50');
 
           const forcedIndicator = document.getElementById('forced-draw-indicator');
           const activeCardFrame = document.getElementById('active-player-card');
 
-          if (forcedDrawsLeft > 0) {
-            stayBtn.classList.add('hidden');
-            drawBtn.innerText = `Manual (${forcedDrawsLeft})`;
-            randomDrawBtn.innerHTML = `Auto (${forcedDrawsLeft})`;
-            
-            drawBtn.className = drawBtn.className.replace(/bg-emerald-600|hover:bg-emerald-500|shadow-emerald-900\/50/g, '').trim() + " bg-rose-600 hover:bg-rose-500 shadow-rose-900/50";
-            randomDrawBtn.className = randomDrawBtn.className.replace(/bg-cyan-600|hover:bg-cyan-500|shadow-cyan-900\/50/g, '').trim() + " bg-rose-600 hover:bg-rose-500 shadow-rose-900/50";
-            
-            activeCardFrame.classList.replace('border-slate-700', 'border-rose-500');
-            forcedIndicator.classList.remove('hidden');
-            forcedIndicator.innerText = `${forcedDrawsLeft} FORCED DRAWS LEFT`;
+          if (forcedDrawsLeft > 0 && amIActivePlayer) {
+              stayBtn.classList.add('hidden');
+              drawBtn.classList.add('bg-rose-600', 'hover:bg-rose-500', 'shadow-rose-900/50');
+              randomDrawBtn.classList.add('bg-rose-600', 'hover:bg-rose-500', 'shadow-rose-900/50');
+              
+              let visibleCount = (!drawBtn.classList.contains('hidden') ? 1 : 0) + (!randomDrawBtn.classList.contains('hidden') ? 1 : 0);
+              if(visibleCount === 2) {
+                  drawBtn.classList.add('col-span-1');
+                  randomDrawBtn.classList.add('col-span-1');
+              } else {
+                  if(!drawBtn.classList.contains('hidden')) drawBtn.classList.add('col-span-2');
+                  if(!randomDrawBtn.classList.contains('hidden')) randomDrawBtn.classList.add('col-span-2');
+              }
+              
+              activeCardFrame.classList.replace('border-slate-700', 'border-rose-500');
+              forcedIndicator.classList.remove('hidden');
+              forcedIndicator.innerText = `${forcedDrawsLeft} FORCED DRAWS LEFT`;
           } else {
-            stayBtn.classList.remove('hidden');
-            drawBtn.innerText = "+ Manual";
-            randomDrawBtn.innerHTML = `<span class="text-2xl leading-none mb-1">🎲</span> Auto Draw`;
-            
-            drawBtn.className = drawBtn.className.replace(/bg-rose-600|hover:bg-rose-500|shadow-rose-900\/50/g, '').trim() + " bg-emerald-600 hover:bg-emerald-500 shadow-emerald-900/50";
-            randomDrawBtn.className = randomDrawBtn.className.replace(/bg-rose-600|hover:bg-rose-500|shadow-rose-900\/50/g, '').trim() + " bg-cyan-600 hover:bg-cyan-500 shadow-cyan-900/50";
-            
-            activeCardFrame.classList.replace('border-rose-500', 'border-slate-700');
-            forcedIndicator.classList.add('hidden');
+              stayBtn.classList.remove('hidden');
+              drawBtn.classList.add('bg-emerald-600', 'hover:bg-emerald-500', 'shadow-emerald-900/50');
+              randomDrawBtn.classList.add('bg-cyan-600', 'hover:bg-cyan-500', 'shadow-cyan-900/50');
+              
+              let sideBtns = (!drawBtn.classList.contains('hidden') ? 1 : 0) + (!randomDrawBtn.classList.contains('hidden') ? 1 : 0);
+              if (sideBtns === 2) {
+                  stayBtn.classList.add('col-span-2', 'sm:col-span-1');
+                  drawBtn.classList.add('col-span-1');
+                  randomDrawBtn.classList.add('col-span-1');
+              } else if (sideBtns === 1) {
+                  stayBtn.classList.add('col-span-1');
+                  if(!drawBtn.classList.contains('hidden')) drawBtn.classList.add('col-span-1');
+                  if(!randomDrawBtn.classList.contains('hidden')) randomDrawBtn.classList.add('col-span-1');
+              } else {
+                  stayBtn.classList.add('col-span-2');
+              }
+              
+              activeCardFrame.classList.replace('border-rose-500', 'border-slate-700');
+              forcedIndicator.classList.add('hidden');
           }
 
           // DYNAMIC RULES (MATH & PROBABILITIES)
