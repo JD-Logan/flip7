@@ -78,10 +78,11 @@
 
     <div class="flex gap-2 overflow-x-auto pb-2 mb-4 no-scrollbar" id="player-status-bar"></div>
 
+    <!-- Active Player Focus -->
     <div class="bg-slate-800 p-4 rounded-xl mb-4 shadow-lg border border-slate-700 transition-all duration-300 relative" id="active-player-card">
       <div class="flex justify-between items-center mb-2">
         <h2 class="text-lg font-bold">
-          <span id="current-player-name" class="text-emerald-400">Player</span>'s Turn
+          <span id="current-player-name" class="text-emerald-400">Player</span><span id="turn-suffix">'s Turn</span>
         </h2>
         <span id="recommendation-badge" class="px-3 py-1 rounded-full text-[10px] sm:text-xs font-bold bg-slate-700 text-slate-300">AWAITING DRAW</span>
       </div>
@@ -112,8 +113,23 @@
       </div>
     </div>
 
+    <!-- MY PERSONAL DASHBOARD (Always Visible) -->
+    <div id="my-personal-board" class="mb-4 mt-auto bg-slate-900 p-3 rounded-xl border border-slate-700 shadow-inner flex flex-col gap-2 relative overflow-hidden">
+       <div class="flex justify-between items-center relative z-10">
+           <span class="font-bold text-sm text-cyan-400 flex items-center gap-2">
+             My Hand <span class="bg-slate-800 text-slate-300 px-2 py-0.5 rounded-full text-[10px] border border-slate-700">Pts: <span id="my-score">0</span></span>
+           </span>
+           <span id="my-status-badge" class="text-[10px] font-bold px-2 py-1 rounded bg-slate-700 shadow text-white tracking-wider uppercase">ACTIVE</span>
+       </div>
+       <div id="my-cards" class="flex flex-wrap gap-1.5 min-h-[32px] relative z-10"></div>
+       
+       <!-- Status Overlay Effects -->
+       <div id="my-frozen-overlay" class="hidden absolute inset-0 bg-blue-500/10 backdrop-blur-[1px] z-0 pointer-events-none border-2 border-blue-500/50 rounded-xl"></div>
+       <div id="my-busted-overlay" class="hidden absolute inset-0 bg-rose-500/10 backdrop-blur-[1px] z-0 pointer-events-none border-2 border-rose-500/50 rounded-xl"></div>
+    </div>
+
     <!-- Controls -->
-    <div class="grid grid-cols-2 gap-3 mt-auto">
+    <div class="grid grid-cols-2 gap-3 mb-2">
       <button id="stay-btn" onclick="stayAction()" class="col-span-1 bg-slate-700 hover:bg-slate-600 py-3 rounded-xl font-bold transition text-slate-200 shadow disabled:opacity-30 disabled:cursor-not-allowed">
         Stay
       </button>
@@ -222,7 +238,7 @@
     window.reshuffleDeckButton = reshuffleDeckButton;
     window.removeCard = removeCard;
 
-    // --- SAFETY SANITIZER ---
+    // --- SAFETY SANITIZER (CRITICAL CRASH FIX) ---
     function deepClone(obj) {
         return JSON.parse(JSON.stringify(obj));
     }
@@ -331,6 +347,7 @@
                 });
             });
 
+            // Reconstruct Array safely
             players = ensureArray(state.players);
             players.forEach(p => {
                p.hand = ensureArray(p.hand);
@@ -364,14 +381,14 @@
               document.getElementById('lobby-screen').classList.add('hidden');
               document.getElementById('tally-screen').classList.add('hidden');
               document.getElementById('game-ui').classList.remove('hidden');
-              updateUI(); // Enters robust try-catch
+              updateUI();
             } else if (data.status === 'tally') {
               document.getElementById('game-ui').classList.add('hidden');
               renderTallyScreen();
             }
         } catch(err) {
             console.error("Firebase Sync Exception:", err);
-            showToast("Sync Error: Refreshing required.");
+            showToast("Sync repaired a background error.");
         }
       });
     }
@@ -449,9 +466,9 @@
     function randomDraw() {
       if(!isMyTurn()) return;
       let cardPool = [];
-      Object.entries(deck.numbers).forEach(([val, count]) => { for(let i=0; i<count; i++) cardPool.push({value: val, type: 'number'}); });
-      Object.entries(deck.modifiers).forEach(([val, count]) => { for(let i=0; i<count; i++) cardPool.push({value: val, type: 'modifier'}); });
-      Object.entries(deck.actions).forEach(([val, count]) => { for(let i=0; i<count; i++) cardPool.push({value: val, type: 'action'}); });
+      Object.entries(deck.numbers).forEach(([val, count]) => { for(let i=0; i<parseInt(count); i++) cardPool.push({value: val, type: 'number'}); });
+      Object.entries(deck.modifiers).forEach(([val, count]) => { for(let i=0; i<parseInt(count); i++) cardPool.push({value: val, type: 'modifier'}); });
+      Object.entries(deck.actions).forEach(([val, count]) => { for(let i=0; i<parseInt(count); i++) cardPool.push({value: val, type: 'action'}); });
 
       if (cardPool.length === 0) return showToast("The deck is completely empty! Reshuffle needed.");
       
@@ -648,9 +665,11 @@
          return;
       }
 
+      // Find next active player
+      let originalIndex = currentPlayerIndex;
       do {
         currentPlayerIndex = (currentPlayerIndex + 1) % players.length;
-      } while (players[currentPlayerIndex].roundStatus !== 'active');
+      } while (players[currentPlayerIndex].roundStatus !== 'active' && currentPlayerIndex !== originalIndex);
       
       broadcastAction(msg || "Turn Advanced.");
     }
@@ -658,7 +677,10 @@
     function startNextRound() {
        if(!isHost) return showToast("Only the host can start the next round.");
        backupStateBeforeAction();
+       
+       // Tally scores permanently before clearing hands
        players.forEach(p => {
+          p.totalScore += calculatePlayerScore(p);
           p.hand = [];
           p.bankedActions = [];
           p.roundStatus = 'active';
@@ -668,8 +690,10 @@
        turnStack = [];
        forcedDrawsLeft = 0;
        
-       update(ref(db, `rooms/${currentRoomCode}`), { status: 'playing' });
-       broadcastAction("New Round Started! Player 1 goes first.");
+       update(ref(db, `rooms/${currentRoomCode}`), { 
+         status: 'playing',
+         gameState: { deck, players, currentPlayerIndex, turnStack, forcedDrawsLeft, lastAction: { msg: "New Round Started! Player 1 goes first.", id: Date.now() }, previousState: previousStateBackup }
+       });
     }
 
     function newGame() {
@@ -688,8 +712,10 @@
        turnStack = [];
        forcedDrawsLeft = 0;
        
-       update(ref(db, `rooms/${currentRoomCode}`), { status: 'playing' });
-       broadcastAction("Game Hard Reset!");
+       update(ref(db, `rooms/${currentRoomCode}`), { 
+         status: 'playing',
+         gameState: { deck, players, currentPlayerIndex, turnStack, forcedDrawsLeft, lastAction: { msg: "Game Hard Reset!", id: Date.now() }, previousState: previousStateBackup }
+       });
     }
 
     function removeCard(playerIndex, handIndex) {
@@ -737,15 +763,15 @@
           renderCardModalGrids();
           
           let player = players[currentPlayerIndex];
-          if(!player) return; // Wait for state to catch up
+          if(!player) return; 
           
           let amIActivePlayer = isMyTurn();
 
+          // 1. Top Horizon Status Bar
           const statusBar = document.getElementById('player-status-bar');
           statusBar.innerHTML = players.map((p, i) => {
             let opacity = p.roundStatus === 'active' ? 'opacity-100' : 'opacity-40';
             let bg = i === currentPlayerIndex ? 'bg-emerald-900/60 border-emerald-500 text-emerald-100 shadow-md scale-105 transition-transform' : 'bg-slate-800 border-slate-700 text-slate-400';
-            
             let statusText = `${p.hand.length} CARDS`;
             if (p.roundStatus === 'stayed') statusText = 'STAYED';
             if (p.roundStatus === 'busted') statusText = 'BUSTED';
@@ -760,15 +786,15 @@
             </div>
           `}).join('');
 
-          document.getElementById('current-player-name').innerText = player.name;
+          // 2. Active Player Center Stage
+          document.getElementById('current-player-name').innerText = amIActivePlayer ? "Your" : player.name;
+          document.getElementById('turn-suffix').innerText = amIActivePlayer ? " Turn" : "'s Turn";
           
           const bankedContainer = document.getElementById('banked-cards-container');
           const bankedCards = document.getElementById('banked-cards');
           if (player.bankedActions && player.bankedActions.length > 0) {
              bankedContainer.classList.remove('hidden');
-             bankedCards.innerHTML = player.bankedActions.map(a => 
-                `<span class="inline-block px-3 py-1 rounded bg-purple-600 text-purple-100 text-xs font-bold shadow-sm">${a}</span>`
-             ).join('');
+             bankedCards.innerHTML = player.bankedActions.map(a => `<span class="inline-block px-3 py-1 rounded bg-purple-600 text-purple-100 text-xs font-bold shadow-sm">${a}</span>`).join('');
           } else {
              bankedContainer.classList.add('hidden');
              bankedCards.innerHTML = '';
@@ -788,6 +814,47 @@
             }).join('');
           }
 
+          // 3. Update "My Personal Board" dashboard
+          let myPlayer = players.find(p => p.id === myPlayerId);
+          if(myPlayer) {
+             document.getElementById('my-score').innerText = calculatePlayerScore(myPlayer);
+             
+             let statBadge = document.getElementById('my-status-badge');
+             let frozenOverlay = document.getElementById('my-frozen-overlay');
+             let bustedOverlay = document.getElementById('my-busted-overlay');
+             
+             frozenOverlay.classList.add('hidden');
+             bustedOverlay.classList.add('hidden');
+
+             if(myPlayer.roundStatus === 'active') {
+                statBadge.innerText = 'ACTIVE';
+                statBadge.className = 'text-[10px] font-bold px-2 py-1 rounded bg-emerald-600 text-white tracking-wider';
+             } else if(myPlayer.roundStatus === 'frozen') {
+                statBadge.innerText = '🧊 FROZEN';
+                statBadge.className = 'text-[10px] font-bold px-2 py-1 rounded bg-blue-500 text-white tracking-wider';
+                frozenOverlay.classList.remove('hidden');
+             } else if(myPlayer.roundStatus === 'busted') {
+                statBadge.innerText = '💥 BUSTED';
+                statBadge.className = 'text-[10px] font-bold px-2 py-1 rounded bg-rose-600 text-white tracking-wider';
+                bustedOverlay.classList.remove('hidden');
+             } else if(myPlayer.roundStatus === 'stayed') {
+                statBadge.innerText = '✅ STAYED';
+                statBadge.className = 'text-[10px] font-bold px-2 py-1 rounded bg-slate-500 text-white tracking-wider';
+             }
+
+             let myCardsDiv = document.getElementById('my-cards');
+             if(myPlayer.hand.length === 0) {
+                 myCardsDiv.innerHTML = '<span class="text-xs text-slate-500 italic flex items-center">No cards drawn yet</span>';
+             } else {
+                 myCardsDiv.innerHTML = myPlayer.hand.map(c => {
+                    if(!c) return '';
+                    let bg = c.type === 'number' ? 'bg-slate-200 text-slate-900' : 'bg-indigo-500 text-white';
+                    return `<span class="inline-flex items-center justify-center min-w-[32px] h-8 px-2 rounded text-xs font-bold shadow-sm ${bg}">${c.value}</span>`;
+                 }).join('');
+             }
+          }
+
+          // 4. Update Controls
           const stayBtn = document.getElementById('stay-btn');
           const drawBtn = document.getElementById('draw-btn');
           const randomDrawBtn = document.getElementById('random-draw-btn');
@@ -823,10 +890,11 @@
             drawBtn.className = drawBtn.className.replace(/bg-rose-600|hover:bg-rose-500|shadow-rose-900\/50/g, '').trim() + " bg-emerald-600 hover:bg-emerald-500 shadow-emerald-900/50";
             randomDrawBtn.className = randomDrawBtn.className.replace(/bg-rose-600|hover:bg-rose-500|shadow-rose-900\/50/g, '').trim() + " bg-cyan-600 hover:bg-cyan-500 shadow-cyan-900/50";
             
-            activeCardFrame.classList.replace('border-slate-700', 'border-slate-700');
+            activeCardFrame.classList.replace('border-rose-500', 'border-slate-700');
             forcedIndicator.classList.add('hidden');
           }
 
+          // 5. Update Math
           let totalCards = 0;
           let bustCardsRemaining = 0;
           const activeNumbers = new Set(player.hand.filter(c => c && c.type === 'number').map(c => c.value));
