@@ -36,7 +36,7 @@
       <div class="flex gap-2">
         <input type="text" id="join-code-input" placeholder="CODE" maxlength="4" class="w-1/2 bg-slate-900 text-white rounded-xl px-4 py-4 text-xl border border-slate-600 focus:outline-none focus:border-cyan-500 text-center font-bold uppercase tracking-widest">
         <button onclick="joinGame()" class="w-1/2 bg-cyan-600 hover:bg-cyan-500 py-4 rounded-xl font-bold text-white shadow-lg shadow-cyan-900/50 transition text-lg">
-          Join
+          Join Room
         </button>
       </div>
     </div>
@@ -208,9 +208,8 @@
     let isHost = false;
     let currentRoomCode = "";
     let lastActionId = 0;
-    let previousStateBackup = null; // 1-Step Multiplayer Undo
+    let previousStateBackup = null; 
 
-    // Make functions globally accessible for HTML onclick handlers
     window.hostGame = hostGame;
     window.joinGame = joinGame;
     window.startGame = startGame;
@@ -287,11 +286,23 @@
     function listenToRoom() {
       onValue(ref(db, `rooms/${currentRoomCode}`), (snapshot) => {
         let data = snapshot.val();
-        if (!data) return; // Room closed
+        if (!data) return; 
 
         let state = data.gameState;
-        deck = state.deck || JSON.parse(JSON.stringify(DECK_TEMPLATE));
+        
+        // CRITICAL FIX: Firebase strips empty arrays. We must rebuild them immediately to prevent crashes.
+        let defaultDeck = JSON.parse(JSON.stringify(DECK_TEMPLATE));
+        deck = state.deck || defaultDeck;
+        deck.numbers = deck.numbers || defaultDeck.numbers;
+        deck.modifiers = deck.modifiers || defaultDeck.modifiers;
+        deck.actions = deck.actions || defaultDeck.actions;
+
         players = state.players || [];
+        players.forEach(p => {
+           p.hand = p.hand || [];
+           p.bankedActions = p.bankedActions || [];
+        });
+
         currentPlayerIndex = state.currentPlayerIndex || 0;
         turnStack = state.turnStack || [];
         forcedDrawsLeft = state.forcedDrawsLeft || 0;
@@ -302,7 +313,6 @@
           showToast(state.lastAction.msg);
         }
 
-        // Update Lobby UI if in lobby
         if (data.status === 'lobby') {
           const list = document.getElementById('lobby-players-list');
           list.innerHTML = players.map(p => `
@@ -313,7 +323,6 @@
           `).join('');
         }
 
-        // Handle Screen Transitions
         if (data.status === 'playing') {
           document.getElementById('lobby-screen').classList.add('hidden');
           document.getElementById('tally-screen').classList.add('hidden');
@@ -334,18 +343,10 @@
 
     // --- SHARED STATE SYNC ---
     function broadcastAction(msg) {
-      let currentStateClone = {
-        deck: JSON.parse(JSON.stringify(deck)),
-        players: JSON.parse(JSON.stringify(players)),
-        currentPlayerIndex,
-        turnStack: JSON.parse(JSON.stringify(turnStack)),
-        forcedDrawsLeft
-      };
-
       set(ref(db, `rooms/${currentRoomCode}/gameState`), {
         deck, players, currentPlayerIndex, turnStack, forcedDrawsLeft,
         lastAction: { msg: msg, id: Date.now() },
-        previousState: previousStateBackup // Carry it forward unless updated
+        previousState: previousStateBackup 
       });
     }
 
@@ -363,16 +364,18 @@
       if (!previousStateBackup) return showToast("Nothing left to undo!");
       
       deck = previousStateBackup.deck;
-      players = previousStateBackup.players;
+      players = previousStateBackup.players || [];
+      players.forEach(p => {
+         p.hand = p.hand || [];
+         p.bankedActions = p.bankedActions || [];
+      });
       currentPlayerIndex = previousStateBackup.currentPlayerIndex;
-      turnStack = previousStateBackup.turnStack;
+      turnStack = previousStateBackup.turnStack || [];
       forcedDrawsLeft = previousStateBackup.forcedDrawsLeft;
       
-      // Close local modals
       document.getElementById('card-modal').classList.add('hidden');
       document.getElementById('target-modal').classList.add('hidden');
       
-      // If we are undoing from tally, revert room status to playing
       if(!document.getElementById('tally-screen').classList.contains('hidden')){
          update(ref(db, `rooms/${currentRoomCode}`), { status: 'playing' });
       }
@@ -382,8 +385,10 @@
 
     // --- GAME ENGINE ---
     function isMyTurn() {
-      if(players.length === 0) return false;
-      return players[currentPlayerIndex].id === myPlayerId;
+      if(!players || players.length === 0) return false;
+      let activePlayer = players[currentPlayerIndex];
+      if(!activePlayer) return false;
+      return activePlayer.id === myPlayerId;
     }
 
     function openManualDraw() {
@@ -401,7 +406,7 @@
       if (cardPool.length === 0) return showToast("The deck is completely empty! Reshuffle needed.");
       
       let drawn = cardPool[Math.floor(Math.random() * cardPool.length)];
-      handleDraw(drawn.value, drawn.type, true); // true = random draw flag
+      handleDraw(drawn.value, drawn.type, true);
     }
 
     function handleDraw(value, type, isRandom = false) {
@@ -568,7 +573,7 @@
         } else if (forcedDrawsLeft === 0) {
             advanceTurnLogic(msg);
         } else {
-            broadcastAction(msg); // Attack continues
+            broadcastAction(msg); 
         }
       } else {
         forcedDrawsLeft = 0;
@@ -589,7 +594,6 @@
       
       let activeCount = players.filter(p => p.roundStatus === 'active').length;
       if (activeCount === 0) {
-         // Push state first, then tell DB to switch to tally view
          broadcastAction(msg);
          setTimeout(() => update(ref(db, `rooms/${currentRoomCode}`), { status: 'tally' }), 200);
          return;
@@ -603,6 +607,7 @@
     }
 
     function startNextRound() {
+       if(!isHost) return showToast("Only the host can start the next round.");
        backupStateBeforeAction();
        players.forEach(p => {
           p.hand = [];
@@ -619,6 +624,7 @@
     }
 
     function newGame() {
+       if(!isHost) return showToast("Only the host can reset the game.");
        if(!confirm("End the game and reset all scores for everyone?")) return;
        backupStateBeforeAction();
        deck = JSON.parse(JSON.stringify(DECK_TEMPLATE));
@@ -669,7 +675,6 @@
         btn.innerText = target.name;
         btn.onclick = () => {
           document.getElementById('target-modal').classList.add('hidden');
-          // Find their global index in the main players array
           let globalIdx = players.findIndex(p => p.id === target.id);
           callback(globalIdx);
         };
@@ -735,7 +740,6 @@
         }).join('');
       }
 
-      // Button Locks
       const stayBtn = document.getElementById('stay-btn');
       const drawBtn = document.getElementById('draw-btn');
       const randomDrawBtn = document.getElementById('random-draw-btn');
@@ -775,7 +779,6 @@
         forcedIndicator.classList.add('hidden');
       }
 
-      // Calculations
       let totalCards = 0;
       let bustCardsRemaining = 0;
       const activeNumbers = new Set(player.hand.filter(c => c.type === 'number').map(c => c.value));
@@ -840,7 +843,6 @@
                 </div>
              </div>
           `;
-          // Note: we don't apply the score to the true state yet, we do that in startNextRound so undo works cleanly.
        });
        
        document.getElementById('tally-screen').classList.remove('hidden');
