@@ -104,7 +104,7 @@
         </div>
         
         <div id="banked-cards-container" class="mb-2 hidden bg-slate-900/60 p-2 rounded-lg border border-slate-700">
-          <p class="text-[10px] text-amber-400 font-bold uppercase mb-1 tracking-wider">Banked Actions</p>
+          <p class="text-[10px] text-amber-400 font-bold uppercase mb-1 tracking-wider">Banked Actions (Resolves if survived)</p>
           <div id="banked-cards" class="flex flex-wrap gap-2"></div>
         </div>
         
@@ -208,6 +208,7 @@
     let lastActionId = 0;
     let previousStateBackup = null; 
 
+    // Bind exports
     window.hostGame = hostGame;
     window.joinGame = joinGame;
     window.startGame = startGame;
@@ -222,11 +223,34 @@
     window.removeCard = removeCard;
 
     // --- SAFETY SANITIZER ---
-    // Cleans out invisible Nulls that Firebase injects when arrays have gaps
+    function deepClone(obj) {
+        return JSON.parse(JSON.stringify(obj));
+    }
+    
     function ensureArray(data) {
         if (!data) return [];
         let arr = Array.isArray(data) ? data : Object.values(data);
         return arr.filter(item => item !== null && item !== undefined);
+    }
+
+    function showToast(message) {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      let bgClass = 'bg-slate-800 border-slate-600';
+      if (message.includes('BUST!') || message.includes('None') || message.includes('No one else') || message.includes('Error')) bgClass = 'bg-rose-700 border-rose-500';
+      if (message.includes('PREVENTED') || message.includes('survived') || message.includes('Undo')) bgClass = 'bg-emerald-700 border-emerald-500';
+      if (message.includes('Action') || message.includes('Second Chance') || message.includes('FROZEN') || message.includes('yourself') || message.includes('banked')) bgClass = 'bg-indigo-700 border-indigo-500';
+      if (message.includes('🎲')) bgClass = 'bg-cyan-700 border-cyan-500'; 
+
+      toast.className = `${bgClass} border text-white px-4 py-3 rounded-lg shadow-xl text-sm font-bold transform transition-all duration-300 translate-y-[-100%] opacity-0 text-center z-[100]`;
+      toast.innerText = message;
+      
+      container.appendChild(toast);
+      requestAnimationFrame(() => toast.classList.remove('translate-y-[-100%]', 'opacity-0'));
+      setTimeout(() => {
+        toast.classList.add('opacity-0');
+        setTimeout(() => toast.remove(), 300);
+      }, 3000);
     }
 
     // --- LOBBY SYSTEM ---
@@ -240,7 +264,7 @@
       set(ref(db, `rooms/${currentRoomCode}`), {
         status: 'lobby',
         gameState: {
-          deck: JSON.parse(JSON.stringify(DECK_TEMPLATE)),
+          deck: deepClone(DECK_TEMPLATE),
           players: [newPlayer],
           currentPlayerIndex: 0,
           turnStack: [],
@@ -291,59 +315,63 @@
 
     function listenToRoom() {
       onValue(ref(db, `rooms/${currentRoomCode}`), (snapshot) => {
-        let data = snapshot.val();
-        if (!data) return; 
+        try {
+            let data = snapshot.val();
+            if (!data) return; 
 
-        let state = data.gameState;
-        
-        let defaultDeck = JSON.parse(JSON.stringify(DECK_TEMPLATE));
-        deck = state.deck || defaultDeck;
-        ['numbers', 'modifiers', 'actions'].forEach(cat => {
-            deck[cat] = deck[cat] || {};
-            Object.keys(defaultDeck[cat]).forEach(k => {
-                if (deck[cat][k] === undefined) deck[cat][k] = 0;
+            let state = data.gameState || {};
+            
+            // Reconstruct Deep Deck Objects robustly (prevents array mis-mapping)
+            let defaultDeck = deepClone(DECK_TEMPLATE);
+            deck = state.deck || defaultDeck;
+            ['numbers', 'modifiers', 'actions'].forEach(cat => {
+                deck[cat] = Array.isArray(deck[cat]) ? Object.assign({}, deck[cat]) : (deck[cat] || {});
+                Object.keys(defaultDeck[cat]).forEach(k => {
+                    if (deck[cat][k] == null) deck[cat][k] = 0;
+                });
             });
-        });
 
-        // Strip nulls from everything
-        players = ensureArray(state.players);
-        players.forEach(p => {
-           p.hand = ensureArray(p.hand);
-           p.bankedActions = ensureArray(p.bankedActions);
-        });
+            players = ensureArray(state.players);
+            players.forEach(p => {
+               p.hand = ensureArray(p.hand);
+               p.bankedActions = ensureArray(p.bankedActions);
+               p.roundStatus = p.roundStatus || 'active';
+               p.totalScore = p.totalScore || 0;
+               p.secondChance = !!p.secondChance;
+            });
 
-        currentPlayerIndex = state.currentPlayerIndex || 0;
-        turnStack = ensureArray(state.turnStack);
-        forcedDrawsLeft = state.forcedDrawsLeft || 0;
-        previousStateBackup = state.previousState || null;
+            currentPlayerIndex = state.currentPlayerIndex || 0;
+            turnStack = ensureArray(state.turnStack);
+            forcedDrawsLeft = state.forcedDrawsLeft || 0;
+            previousStateBackup = state.previousState || null;
 
-        if (state.lastAction && state.lastAction.id !== lastActionId) {
-          lastActionId = state.lastAction.id;
-          showToast(state.lastAction.msg);
-        }
+            if (state.lastAction && state.lastAction.id !== lastActionId) {
+              lastActionId = state.lastAction.id;
+              showToast(state.lastAction.msg);
+            }
 
-        if (data.status === 'lobby') {
-          const list = document.getElementById('lobby-players-list');
-          list.innerHTML = players.map(p => `
-            <div class="bg-slate-700 px-4 py-3 rounded-lg font-bold text-white shadow-inner flex justify-between">
-              <span>${p.name}</span>
-              ${p.id === players[0].id ? '<span class="text-xs text-amber-400 uppercase tracking-widest mt-1">Host</span>' : ''}
-            </div>
-          `).join('');
-        }
-
-        if (data.status === 'playing') {
-          document.getElementById('lobby-screen').classList.add('hidden');
-          document.getElementById('tally-screen').classList.add('hidden');
-          document.getElementById('game-ui').classList.remove('hidden');
-          try {
-             updateUI();
-          } catch(e) {
-             console.error("UI Render Error:", e);
-          }
-        } else if (data.status === 'tally') {
-          document.getElementById('game-ui').classList.add('hidden');
-          renderTallyScreen();
+            if (data.status === 'lobby') {
+              const list = document.getElementById('lobby-players-list');
+              if(list) {
+                  list.innerHTML = players.map(p => `
+                    <div class="bg-slate-700 px-4 py-3 rounded-lg font-bold text-white shadow-inner flex justify-between">
+                      <span>${p.name}</span>
+                      ${players.length > 0 && p.id === players[0].id ? '<span class="text-xs text-amber-400 uppercase tracking-widest mt-1">Host</span>' : ''}
+                    </div>
+                  `).join('');
+              }
+            } else if (data.status === 'playing') {
+              document.getElementById('lobby-screen').classList.add('hidden');
+              document.getElementById('tally-screen').classList.add('hidden');
+              document.getElementById('game-ui').classList.remove('hidden');
+              updateUI(); // Enters robust try-catch
+            } else if (data.status === 'tally') {
+              document.getElementById('game-ui').classList.add('hidden');
+              renderTallyScreen();
+            }
+        } catch(err) {
+            console.error("Firebase Sync Exception:", err);
+            showToast("Sync Error: Refreshing required.");
         }
       });
     }
@@ -374,10 +402,10 @@
 
     function backupStateBeforeAction() {
       previousStateBackup = {
-        deck: JSON.parse(JSON.stringify(deck)),
-        players: JSON.parse(JSON.stringify(players)),
+        deck: deepClone(deck),
+        players: deepClone(players),
         currentPlayerIndex,
-        turnStack: JSON.parse(JSON.stringify(turnStack)),
+        turnStack: deepClone(turnStack),
         forcedDrawsLeft
       };
     }
@@ -503,7 +531,7 @@
         }
       } 
       else if (type === 'number') {
-        let activeNumbers = new Set(player.hand.filter(c => c.type === 'number').map(c => c.value));
+        let activeNumbers = new Set(player.hand.filter(c => c && c.type === 'number').map(c => c.value));
         deck.numbers[value]--;
         
         if (activeNumbers.has(value)) {
@@ -553,7 +581,6 @@
       }
       
       let action = player.bankedActions.shift();
-      let msg = precedingMsg ? precedingMsg + " Unpacking Banked Card..." : "Unpacking Banked Card...";
 
       if (action === 'Flip3') {
           let activePlayers = players.filter(p => p.roundStatus === 'active');
@@ -649,7 +676,7 @@
        if(!isHost) return showToast("Only the host can reset the game.");
        if(!confirm("End the game and reset all scores for everyone?")) return;
        backupStateBeforeAction();
-       deck = JSON.parse(JSON.stringify(DECK_TEMPLATE));
+       deck = deepClone(DECK_TEMPLATE);
        players.forEach(p => {
           p.hand = [];
           p.bankedActions = [];
@@ -676,7 +703,7 @@
 
     function reshuffleDeckButton() {
       backupStateBeforeAction();
-      deck = JSON.parse(JSON.stringify(DECK_TEMPLATE));
+      deck = deepClone(DECK_TEMPLATE);
       players.forEach(p => {
         p.hand.forEach(card => deck[card.type + 's'][card.value]--);
         if (p.secondChance) deck.actions['SecondChance']--;
@@ -705,163 +732,146 @@
       document.getElementById('target-modal').classList.remove('hidden');
     }
 
-    function showToast(message) {
-      const container = document.getElementById('toast-container');
-      const toast = document.createElement('div');
-      let bgClass = 'bg-slate-800 border-slate-600';
-      if (message.includes('BUST!') || message.includes('None') || message.includes('No one else')) bgClass = 'bg-rose-700 border-rose-500';
-      if (message.includes('PREVENTED') || message.includes('survived') || message.includes('Undo')) bgClass = 'bg-emerald-700 border-emerald-500';
-      if (message.includes('Action') || message.includes('Second Chance') || message.includes('FROZEN') || message.includes('yourself') || message.includes('banked')) bgClass = 'bg-indigo-700 border-indigo-500';
-      if (message.includes('Drew:')) bgClass = 'bg-cyan-700 border-cyan-500'; 
-
-      toast.className = `${bgClass} border text-white px-4 py-3 rounded-lg shadow-xl text-sm font-bold transform transition-all duration-300 translate-y-[-100%] opacity-0 text-center z-[100]`;
-      toast.innerText = message;
-      
-      container.appendChild(toast);
-      requestAnimationFrame(() => toast.classList.remove('translate-y-[-100%]', 'opacity-0'));
-      setTimeout(() => {
-        toast.classList.add('opacity-0');
-        setTimeout(() => toast.remove(), 300);
-      }, 3000);
-    }
-
     function updateUI() {
-      renderCardModalGrids();
-      
-      let player = players[currentPlayerIndex];
-      if(!player) {
-         document.getElementById('current-player-name').innerText = "Loading...";
-         return; 
-      }
-      
-      let amIActivePlayer = isMyTurn();
+      try {
+          renderCardModalGrids();
+          
+          let player = players[currentPlayerIndex];
+          if(!player) return; // Wait for state to catch up
+          
+          let amIActivePlayer = isMyTurn();
 
-      const statusBar = document.getElementById('player-status-bar');
-      statusBar.innerHTML = players.map((p, i) => {
-        let opacity = p.roundStatus === 'active' ? 'opacity-100' : 'opacity-40';
-        let bg = i === currentPlayerIndex ? 'bg-emerald-900/60 border-emerald-500 text-emerald-100 shadow-md scale-105 transition-transform' : 'bg-slate-800 border-slate-700 text-slate-400';
-        
-        let statusText = `${p.hand.length} CARDS`;
-        if (p.roundStatus === 'stayed') statusText = 'STAYED';
-        if (p.roundStatus === 'busted') statusText = 'BUSTED';
-        if (p.roundStatus === 'frozen') statusText = 'FROZEN';
-        let meIndicator = p.id === myPlayerId ? '*(You)*' : '';
+          const statusBar = document.getElementById('player-status-bar');
+          statusBar.innerHTML = players.map((p, i) => {
+            let opacity = p.roundStatus === 'active' ? 'opacity-100' : 'opacity-40';
+            let bg = i === currentPlayerIndex ? 'bg-emerald-900/60 border-emerald-500 text-emerald-100 shadow-md scale-105 transition-transform' : 'bg-slate-800 border-slate-700 text-slate-400';
+            
+            let statusText = `${p.hand.length} CARDS`;
+            if (p.roundStatus === 'stayed') statusText = 'STAYED';
+            if (p.roundStatus === 'busted') statusText = 'BUSTED';
+            if (p.roundStatus === 'frozen') statusText = 'FROZEN';
+            let meIndicator = p.id === myPlayerId ? '*(You)*' : '';
 
-        return `
-        <div class="flex-shrink-0 px-4 py-2 rounded-xl border ${bg} ${opacity}">
-          <span class="font-bold text-sm whitespace-nowrap">${p.name} <span class="text-[10px] font-normal text-slate-300">${meIndicator}</span></span>
-          ${p.secondChance ? `<span class="ml-1 text-[10px] bg-amber-500 text-amber-950 px-1.5 py-0.5 rounded-full font-bold">SC</span>` : ''}
-          <div class="text-[10px] mt-1 tracking-wide font-bold">${statusText}</div>
-        </div>
-      `}).join('');
+            return `
+            <div class="flex-shrink-0 px-4 py-2 rounded-xl border ${bg} ${opacity}">
+              <span class="font-bold text-sm whitespace-nowrap">${p.name} <span class="text-[10px] font-normal text-slate-300">${meIndicator}</span></span>
+              ${p.secondChance ? `<span class="ml-1 text-[10px] bg-amber-500 text-amber-950 px-1.5 py-0.5 rounded-full font-bold">SC</span>` : ''}
+              <div class="text-[10px] mt-1 tracking-wide font-bold">${statusText}</div>
+            </div>
+          `}).join('');
 
-      document.getElementById('current-player-name').innerText = player.name;
-      
-      const bankedContainer = document.getElementById('banked-cards-container');
-      const bankedCards = document.getElementById('banked-cards');
-      if (player.bankedActions && player.bankedActions.length > 0) {
-         bankedContainer.classList.remove('hidden');
-         bankedCards.innerHTML = player.bankedActions.map(a => 
-            `<span class="inline-block px-3 py-1 rounded bg-purple-600 text-purple-100 text-xs font-bold shadow-sm">${a}</span>`
-         ).join('');
-      } else {
-         bankedContainer.classList.add('hidden');
-         bankedCards.innerHTML = '';
-      }
+          document.getElementById('current-player-name').innerText = player.name;
+          
+          const bankedContainer = document.getElementById('banked-cards-container');
+          const bankedCards = document.getElementById('banked-cards');
+          if (player.bankedActions && player.bankedActions.length > 0) {
+             bankedContainer.classList.remove('hidden');
+             bankedCards.innerHTML = player.bankedActions.map(a => 
+                `<span class="inline-block px-3 py-1 rounded bg-purple-600 text-purple-100 text-xs font-bold shadow-sm">${a}</span>`
+             ).join('');
+          } else {
+             bankedContainer.classList.add('hidden');
+             bankedCards.innerHTML = '';
+          }
 
-      const container = document.getElementById('active-cards');
-      document.getElementById('tap-undo-text').style.display = amIActivePlayer ? 'inline' : 'none';
+          const container = document.getElementById('active-cards');
+          document.getElementById('tap-undo-text').style.display = amIActivePlayer ? 'inline' : 'none';
 
-      if (player.hand.length === 0) {
-        container.innerHTML = '<span class="text-slate-500 text-sm italic py-2 px-1">Table is empty</span>';
-      } else {
-        container.innerHTML = player.hand.map((c, i) => {
-          let clickAttr = amIActivePlayer ? `onclick="removeCard(${currentPlayerIndex}, ${i})"` : '';
-          let hoverClass = amIActivePlayer ? (c.type === 'number' ? 'hover:bg-white cursor-pointer' : 'hover:bg-indigo-400 cursor-pointer') : 'cursor-default';
-          return `<span ${clickAttr} class="inline-flex items-center justify-center min-w-[36px] h-9 px-3 rounded-lg text-sm font-bold shadow-sm transition transform ${amIActivePlayer ? 'hover:scale-105 active:scale-95' : ''} ${c.type === 'number' ? `bg-slate-200 text-slate-900 ${hoverClass}` : `bg-indigo-500 text-white ${hoverClass}`}">${c.value} ${amIActivePlayer ? '&times;' : ''}</span>`;
-        }).join('');
-      }
+          if (player.hand.length === 0) {
+            container.innerHTML = '<span class="text-slate-500 text-sm italic py-2 px-1">Table is empty</span>';
+          } else {
+            container.innerHTML = player.hand.map((c, i) => {
+              if(!c) return '';
+              let clickAttr = amIActivePlayer ? `onclick="removeCard(${currentPlayerIndex}, ${i})"` : '';
+              let hoverClass = amIActivePlayer ? (c.type === 'number' ? 'hover:bg-white cursor-pointer' : 'hover:bg-indigo-400 cursor-pointer') : 'cursor-default';
+              return `<span ${clickAttr} class="inline-flex items-center justify-center min-w-[36px] h-9 px-3 rounded-lg text-sm font-bold shadow-sm transition transform ${amIActivePlayer ? 'hover:scale-105 active:scale-95' : ''} ${c.type === 'number' ? `bg-slate-200 text-slate-900 ${hoverClass}` : `bg-indigo-500 text-white ${hoverClass}`}">${c.value} ${amIActivePlayer ? '&times;' : ''}</span>`;
+            }).join('');
+          }
 
-      const stayBtn = document.getElementById('stay-btn');
-      const drawBtn = document.getElementById('draw-btn');
-      const randomDrawBtn = document.getElementById('random-draw-btn');
-      
-      stayBtn.disabled = !amIActivePlayer;
-      drawBtn.disabled = !amIActivePlayer;
-      randomDrawBtn.disabled = !amIActivePlayer;
+          const stayBtn = document.getElementById('stay-btn');
+          const drawBtn = document.getElementById('draw-btn');
+          const randomDrawBtn = document.getElementById('random-draw-btn');
+          
+          stayBtn.disabled = !amIActivePlayer;
+          drawBtn.disabled = !amIActivePlayer;
+          randomDrawBtn.disabled = !amIActivePlayer;
 
-      const forcedIndicator = document.getElementById('forced-draw-indicator');
-      const activeCardFrame = document.getElementById('active-player-card');
+          const forcedIndicator = document.getElementById('forced-draw-indicator');
+          const activeCardFrame = document.getElementById('active-player-card');
 
-      if (forcedDrawsLeft > 0) {
-        stayBtn.classList.add('hidden');
-        drawBtn.classList.replace('col-span-1', 'col-span-1');
-        randomDrawBtn.classList.replace('col-span-2', 'col-span-1');
-        
-        drawBtn.innerText = `Manual (${forcedDrawsLeft})`;
-        randomDrawBtn.innerHTML = `Auto (${forcedDrawsLeft})`;
-        
-        drawBtn.className = drawBtn.className.replace(/bg-emerald-600|hover:bg-emerald-500|shadow-emerald-900\/50/g, '').trim() + " bg-rose-600 hover:bg-rose-500 shadow-rose-900/50";
-        randomDrawBtn.className = randomDrawBtn.className.replace(/bg-cyan-600|hover:bg-cyan-500|shadow-cyan-900\/50/g, '').trim() + " bg-rose-600 hover:bg-rose-500 shadow-rose-900/50";
-        
-        activeCardFrame.classList.replace('border-slate-700', 'border-rose-500');
-        forcedIndicator.classList.remove('hidden');
-        forcedIndicator.innerText = `${forcedDrawsLeft} FORCED DRAWS LEFT`;
-      } else {
-        stayBtn.classList.remove('hidden');
-        randomDrawBtn.classList.replace('col-span-1', 'col-span-2');
-        
-        drawBtn.innerText = "+ Manual";
-        randomDrawBtn.innerHTML = `<span class="text-2xl leading-none mb-1">🎲</span> Auto Draw`;
-        
-        drawBtn.className = drawBtn.className.replace(/bg-rose-600|hover:bg-rose-500|shadow-rose-900\/50/g, '').trim() + " bg-emerald-600 hover:bg-emerald-500 shadow-emerald-900/50";
-        randomDrawBtn.className = randomDrawBtn.className.replace(/bg-rose-600|hover:bg-rose-500|shadow-rose-900\/50/g, '').trim() + " bg-cyan-600 hover:bg-cyan-500 shadow-cyan-900/50";
-        
-        activeCardFrame.classList.replace('border-rose-500', 'border-slate-700');
-        forcedIndicator.classList.add('hidden');
-      }
+          if (forcedDrawsLeft > 0) {
+            stayBtn.classList.add('hidden');
+            drawBtn.classList.replace('col-span-1', 'col-span-1');
+            randomDrawBtn.classList.replace('col-span-2', 'col-span-1');
+            
+            drawBtn.innerText = `Manual (${forcedDrawsLeft})`;
+            randomDrawBtn.innerHTML = `Auto (${forcedDrawsLeft})`;
+            
+            drawBtn.className = drawBtn.className.replace(/bg-emerald-600|hover:bg-emerald-500|shadow-emerald-900\/50/g, '').trim() + " bg-rose-600 hover:bg-rose-500 shadow-rose-900/50";
+            randomDrawBtn.className = randomDrawBtn.className.replace(/bg-cyan-600|hover:bg-cyan-500|shadow-cyan-900\/50/g, '').trim() + " bg-rose-600 hover:bg-rose-500 shadow-rose-900/50";
+            
+            activeCardFrame.classList.replace('border-slate-700', 'border-rose-500');
+            forcedIndicator.classList.remove('hidden');
+            forcedIndicator.innerText = `${forcedDrawsLeft} FORCED DRAWS LEFT`;
+          } else {
+            stayBtn.classList.remove('hidden');
+            randomDrawBtn.classList.replace('col-span-1', 'col-span-2');
+            
+            drawBtn.innerText = "+ Manual";
+            randomDrawBtn.innerHTML = `<span class="text-2xl leading-none mb-1">🎲</span> Auto Draw`;
+            
+            drawBtn.className = drawBtn.className.replace(/bg-rose-600|hover:bg-rose-500|shadow-rose-900\/50/g, '').trim() + " bg-emerald-600 hover:bg-emerald-500 shadow-emerald-900/50";
+            randomDrawBtn.className = randomDrawBtn.className.replace(/bg-rose-600|hover:bg-rose-500|shadow-rose-900\/50/g, '').trim() + " bg-cyan-600 hover:bg-cyan-500 shadow-cyan-900/50";
+            
+            activeCardFrame.classList.replace('border-slate-700', 'border-slate-700');
+            forcedIndicator.classList.add('hidden');
+          }
 
-      let totalCards = 0;
-      let bustCardsRemaining = 0;
-      const activeNumbers = new Set(player.hand.filter(c => c && c.type === 'number').map(c => c.value));
+          let totalCards = 0;
+          let bustCardsRemaining = 0;
+          const activeNumbers = new Set(player.hand.filter(c => c && c.type === 'number').map(c => c.value));
 
-      Object.entries(deck.numbers).forEach(([val, count]) => {
-        totalCards += count;
-        if (activeNumbers.has(val)) bustCardsRemaining += count;
-      });
-      Object.values(deck.modifiers).forEach(count => totalCards += count);
-      Object.values(deck.actions).forEach(count => totalCards += count);
+          Object.entries(deck.numbers).forEach(([val, count]) => {
+            totalCards += count;
+            if (activeNumbers.has(val)) bustCardsRemaining += count;
+          });
+          Object.values(deck.modifiers).forEach(count => totalCards += count);
+          Object.values(deck.actions).forEach(count => totalCards += count);
 
-      let probBust = player.secondChance ? 0 : (totalCards > 0 ? (bustCardsRemaining / totalCards) : 0);
-      let currentScore = calculatePlayerScore(player);
-      
-      document.getElementById('cards-remaining').innerText = totalCards;
-      
-      const probEl = document.getElementById('prob-bust');
-      probEl.innerText = (probBust * 100).toFixed(1) + '%';
-      probEl.className = `text-2xl font-mono font-bold ${probBust >= 0.25 ? 'text-rose-500' : (probBust > 0.15 ? 'text-amber-400' : 'text-emerald-400')}`;
-      document.getElementById('expected-value').innerText = currentScore;
+          let probBust = player.secondChance ? 0 : (totalCards > 0 ? (bustCardsRemaining / totalCards) : 0);
+          let currentScore = calculatePlayerScore(player);
+          
+          document.getElementById('cards-remaining').innerText = totalCards;
+          
+          const probEl = document.getElementById('prob-bust');
+          probEl.innerText = (probBust * 100).toFixed(1) + '%';
+          probEl.className = `text-2xl font-mono font-bold ${probBust >= 0.25 ? 'text-rose-500' : (probBust > 0.15 ? 'text-amber-400' : 'text-emerald-400')}`;
+          document.getElementById('expected-value').innerText = currentScore;
 
-      const badge = document.getElementById('recommendation-badge');
-      if (forcedDrawsLeft > 0) {
-        badge.innerText = "FORCED DRAW";
-        badge.className = "px-3 py-1 rounded-full text-[10px] font-bold bg-rose-500 text-white animate-pulse tracking-wider";
-      } else if (player.hand.length === 0) {
-        badge.innerText = "NEW HAND";
-        badge.className = "px-3 py-1 rounded-full text-[10px] font-bold bg-slate-700 text-slate-300 tracking-wider";
-      } else if (player.secondChance || probBust < 0.15) {
-        badge.innerText = "RECOMMEND: HIT";
-        badge.className = "px-3 py-1 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500 tracking-wider";
-      } else if (probBust >= 0.25) {
-        badge.innerText = "RECOMMEND: STAY";
-        badge.className = "px-3 py-1 rounded-full text-[10px] font-bold bg-rose-500/20 text-rose-400 border border-rose-500 tracking-wider";
-      } else {
-        badge.innerText = "CAUTION (SQUEEZE)";
-        badge.className = "px-3 py-1 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500 tracking-wider";
+          const badge = document.getElementById('recommendation-badge');
+          if (forcedDrawsLeft > 0) {
+            badge.innerText = "FORCED DRAW";
+            badge.className = "px-3 py-1 rounded-full text-[10px] font-bold bg-rose-500 text-white animate-pulse tracking-wider";
+          } else if (player.hand.length === 0) {
+            badge.innerText = "NEW HAND";
+            badge.className = "px-3 py-1 rounded-full text-[10px] font-bold bg-slate-700 text-slate-300 tracking-wider";
+          } else if (player.secondChance || probBust < 0.15) {
+            badge.innerText = "RECOMMEND: HIT";
+            badge.className = "px-3 py-1 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500 tracking-wider";
+          } else if (probBust >= 0.25) {
+            badge.innerText = "RECOMMEND: STAY";
+            badge.className = "px-3 py-1 rounded-full text-[10px] font-bold bg-rose-500/20 text-rose-400 border border-rose-500 tracking-wider";
+          } else {
+            badge.innerText = "CAUTION (SQUEEZE)";
+            badge.className = "px-3 py-1 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500 tracking-wider";
+          }
+      } catch (err) {
+          console.error("UI Render Blocked:", err);
       }
     }
 
     function calculatePlayerScore(player) {
+       if(!player || !player.hand) return 0;
        let score = 0;
        let multiplier = 1;
        player.hand.forEach(c => {
