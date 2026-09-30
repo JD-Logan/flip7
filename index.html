@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Flip 7 Tracker Pro</title>
+  <title>Flip 7 Tracker & Game</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     .no-scrollbar::-webkit-scrollbar { display: none; }
@@ -17,7 +17,7 @@
   <!-- SETUP SCREEN -->
   <div id="setup-screen" class="absolute inset-0 z-50 bg-slate-900 flex flex-col items-center justify-center p-6">
     <h1 class="text-4xl font-bold text-emerald-400 mb-2">Flip 7</h1>
-    <p class="text-slate-400 mb-6">Probability Tracker Engine</p>
+    <p class="text-slate-400 mb-6">Tracker & Digital Game Engine</p>
     
     <div class="bg-slate-800 p-6 rounded-2xl w-full max-w-sm text-center border border-slate-700 shadow-2xl flex flex-col max-h-[85vh]">
       <label class="block text-sm font-bold text-slate-300 mb-4 flex-shrink-0">How many players?</label>
@@ -42,7 +42,7 @@
   <div id="game-ui" class="hidden flex flex-col h-full min-h-[90vh]">
     <header class="flex justify-between items-center mb-4 border-b border-slate-700 pb-4 gap-2">
       <div class="flex-shrink-0">
-        <h1 class="text-xl font-bold text-emerald-400 leading-tight">Flip 7 Tracker</h1>
+        <h1 class="text-xl font-bold text-emerald-400 leading-tight">Flip 7</h1>
         <p class="text-sm text-slate-400">Pile: <span id="cards-remaining">94</span> cards</p>
       </div>
       <div class="flex flex-wrap justify-end gap-2">
@@ -98,12 +98,15 @@
     </div>
 
     <!-- Controls -->
-    <div class="grid grid-cols-2 gap-4 mb-2 mt-auto">
-      <button id="stay-btn" onclick="stayAction()" class="bg-slate-700 hover:bg-slate-600 py-4 rounded-xl font-bold transition text-slate-200 shadow">
+    <div class="grid grid-cols-2 gap-3 mb-2 mt-auto">
+      <button id="stay-btn" onclick="stayAction()" class="col-span-1 bg-slate-700 hover:bg-slate-600 py-3 rounded-xl font-bold transition text-slate-200 shadow">
         Stay
       </button>
-      <button id="draw-btn" onclick="document.getElementById('card-modal').classList.remove('hidden')" class="bg-emerald-600 hover:bg-emerald-500 py-4 rounded-xl font-bold text-white shadow-lg shadow-emerald-900/50 transition col-span-1 text-lg">
-        + Draw Card
+      <button id="draw-btn" onclick="document.getElementById('card-modal').classList.remove('hidden')" class="col-span-1 bg-emerald-600 hover:bg-emerald-500 py-3 rounded-xl font-bold text-white shadow-lg shadow-emerald-900/50 transition">
+        + Manual
+      </button>
+      <button id="random-draw-btn" onclick="randomDraw()" class="col-span-2 bg-cyan-600 hover:bg-cyan-500 py-4 rounded-xl font-bold text-white shadow-lg shadow-cyan-900/50 transition text-lg flex items-center justify-center gap-2">
+        <span class="text-2xl leading-none mb-1">🎲</span> Auto Draw
       </button>
     </div>
   </div>
@@ -172,7 +175,6 @@
     let turnStack = []; 
     let forcedDrawsLeft = 0;
 
-    // The Time Machine
     let gameHistory = [];
 
     window.onload = () => renderPlayerNameInputs();
@@ -195,6 +197,7 @@
       if (message.includes('BUST!') || message.includes('None') || message.includes('No one else')) bgClass = 'bg-rose-700 border-rose-500';
       if (message.includes('PREVENTED') || message.includes('survived') || message.includes('Undo')) bgClass = 'bg-emerald-700 border-emerald-500';
       if (message.includes('Action') || message.includes('Second Chance') || message.includes('FROZEN') || message.includes('yourself') || message.includes('banked')) bgClass = 'bg-indigo-700 border-indigo-500';
+      if (message.includes('Drew:')) bgClass = 'bg-cyan-700 border-cyan-500'; // Special style for random draw
 
       toast.className = `${bgClass} border text-white px-4 py-3 rounded-lg shadow-xl text-sm font-bold transform transition-all duration-300 translate-y-[-100%] opacity-0 text-center z-[100]`;
       toast.innerText = message;
@@ -207,9 +210,8 @@
       }, 3000);
     }
 
-    // --- UNDO ENGINE ---
     function saveState() {
-      if (gameHistory.length > 25) gameHistory.shift(); // Keep memory light
+      if (gameHistory.length > 25) gameHistory.shift(); 
       gameHistory.push({
         deck: JSON.parse(JSON.stringify(deck)),
         players: JSON.parse(JSON.stringify(players)),
@@ -232,7 +234,6 @@
       turnStack = previousState.turnStack;
       forcedDrawsLeft = previousState.forcedDrawsLeft;
       
-      // Force close all modals and tally screens
       document.getElementById('card-modal').classList.add('hidden');
       document.getElementById('target-modal').classList.add('hidden');
       document.getElementById('tally-screen').classList.add('hidden');
@@ -255,13 +256,41 @@
         hand: [], 
         bankedActions: [],
         secondChance: false,
-        roundStatus: 'active', // active, stayed, busted, frozen
+        roundStatus: 'active',
         totalScore: 0
       }));
-      gameHistory = []; // Reset history
+      gameHistory = []; 
       document.getElementById('setup-screen').classList.add('hidden');
       document.getElementById('game-ui').classList.remove('hidden');
       updateUI();
+    }
+
+    // --- RANDOM DRAW DIGITAL ENGINE ---
+    function randomDraw() {
+      let cardPool = [];
+      
+      Object.entries(deck.numbers).forEach(([val, count]) => {
+        for(let i=0; i<count; i++) cardPool.push({value: val, type: 'number'});
+      });
+      Object.entries(deck.modifiers).forEach(([val, count]) => {
+        for(let i=0; i<count; i++) cardPool.push({value: val, type: 'modifier'});
+      });
+      Object.entries(deck.actions).forEach(([val, count]) => {
+        for(let i=0; i<count; i++) cardPool.push({value: val, type: 'action'});
+      });
+
+      if (cardPool.length === 0) {
+        showToast("The deck is completely empty! Reshuffle needed.");
+        return;
+      }
+
+      let randomIndex = Math.floor(Math.random() * cardPool.length);
+      let drawnCard = cardPool[randomIndex];
+
+      showToast(`🎲 Drew: ${drawnCard.value}`);
+      
+      // Directly pass it into our standard draw function which handles saving state and rules!
+      handleDraw(drawnCard.value, drawnCard.type);
     }
 
     function renderCardModalGrids() {
@@ -308,7 +337,7 @@
     function handleDraw(value, type) {
       if (deck[type + 's'][value] <= 0) return; 
       
-      saveState(); // SAVE BEFORE MUTATION
+      saveState(); 
       
       document.getElementById('card-modal').classList.add('hidden');
       let player = players[currentPlayerIndex];
@@ -695,28 +724,44 @@
 
       const stayBtn = document.getElementById('stay-btn');
       const drawBtn = document.getElementById('draw-btn');
+      const randomDrawBtn = document.getElementById('random-draw-btn');
       const forcedIndicator = document.getElementById('forced-draw-indicator');
       const activeCardFrame = document.getElementById('active-player-card');
 
       if (forcedDrawsLeft > 0) {
         stayBtn.classList.add('hidden');
-        drawBtn.classList.remove('col-span-1');
-        drawBtn.classList.add('col-span-2');
-        drawBtn.innerText = `Force Draw (${forcedDrawsLeft} left)`;
+        drawBtn.classList.replace('col-span-1', 'col-span-1');
+        randomDrawBtn.classList.replace('col-span-2', 'col-span-1');
+        
+        drawBtn.innerText = `Manual (${forcedDrawsLeft})`;
+        randomDrawBtn.innerText = `Auto (${forcedDrawsLeft})`;
+        
         drawBtn.classList.replace('bg-emerald-600', 'bg-rose-600');
         drawBtn.classList.replace('hover:bg-emerald-500', 'hover:bg-rose-500');
         drawBtn.classList.replace('shadow-emerald-900/50', 'shadow-rose-900/50');
+        
+        randomDrawBtn.classList.replace('bg-cyan-600', 'bg-rose-600');
+        randomDrawBtn.classList.replace('hover:bg-cyan-500', 'hover:bg-rose-500');
+        randomDrawBtn.classList.replace('shadow-cyan-900/50', 'shadow-rose-900/50');
+        
         activeCardFrame.classList.replace('border-slate-700', 'border-rose-500');
         forcedIndicator.classList.remove('hidden');
         forcedIndicator.innerText = `${forcedDrawsLeft} FORCED DRAWS LEFT`;
       } else {
         stayBtn.classList.remove('hidden');
-        drawBtn.classList.add('col-span-1');
-        drawBtn.classList.remove('col-span-2');
-        drawBtn.innerText = "+ Draw Card";
+        randomDrawBtn.classList.replace('col-span-1', 'col-span-2');
+        
+        drawBtn.innerText = "+ Manual";
+        randomDrawBtn.innerHTML = `<span class="text-2xl leading-none mb-1">🎲</span> Auto Draw`;
+        
         drawBtn.classList.replace('bg-rose-600', 'bg-emerald-600');
         drawBtn.classList.replace('hover:bg-rose-500', 'hover:bg-emerald-500');
         drawBtn.classList.replace('shadow-rose-900/50', 'shadow-emerald-900/50');
+        
+        randomDrawBtn.classList.replace('bg-rose-600', 'bg-cyan-600');
+        randomDrawBtn.classList.replace('hover:bg-rose-500', 'hover:bg-cyan-500');
+        randomDrawBtn.classList.replace('shadow-rose-900/50', 'shadow-cyan-900/50');
+        
         activeCardFrame.classList.replace('border-rose-500', 'border-slate-700');
         forcedIndicator.classList.add('hidden');
       }
