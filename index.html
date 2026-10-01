@@ -15,14 +15,39 @@
   <div id="toast-container" class="fixed top-4 left-1/2 -translate-x-1/2 z-[100] flex flex-col gap-2 pointer-events-none w-[90%] max-w-sm"></div>
 
   <!-- SCREEN 1: HOME (Host / Join) -->
-  <div id="home-screen" class="absolute inset-0 z-50 bg-slate-900 flex flex-col items-center justify-center p-6">
-    <h1 class="text-5xl font-bold text-emerald-400 mb-2 tracking-tight">Flip 7</h1>
-    <p class="text-slate-400 mb-8 font-semibold uppercase tracking-widest text-sm">Online Multiplayer</p>
+  <div id="home-screen" class="absolute inset-0 z-50 bg-slate-900 flex flex-col items-center justify-center p-6 overflow-y-auto">
+    <h1 class="text-5xl font-bold text-emerald-400 mb-2 tracking-tight mt-10">Flip 7</h1>
+    <p class="text-slate-400 mb-6 font-semibold uppercase tracking-widest text-sm">Online Multiplayer</p>
     
-    <div class="bg-slate-800 p-6 rounded-2xl w-full max-w-sm text-center border border-slate-700 shadow-2xl">
+    <div class="bg-slate-800 p-6 rounded-2xl w-full max-w-sm border border-slate-700 shadow-2xl mb-10">
       <label class="block text-sm font-bold text-slate-300 mb-2 text-left">Your Player Name</label>
       <input type="text" id="my-name-input" placeholder="e.g. John" class="w-full bg-slate-900 text-white rounded-xl px-4 py-4 text-lg border border-slate-600 focus:outline-none focus:border-emerald-500 mb-6 text-center font-bold">
       
+      <!-- Room Rules (Host Only) -->
+      <div class="text-left bg-slate-900 p-4 rounded-xl mb-6 border border-slate-700 shadow-inner">
+        <h3 class="text-xs font-bold text-emerald-400 mb-3 uppercase tracking-wider">Room Rules (Host)</h3>
+        
+        <label class="flex items-center gap-3 mb-3 cursor-pointer">
+          <input type="checkbox" id="set-auto" checked class="w-5 h-5 accent-emerald-500 rounded">
+          <span class="text-sm font-bold text-slate-300">Enable Auto Draw <span class="text-[10px] text-slate-500 block">(Digital Game)</span></span>
+        </label>
+        
+        <label class="flex items-center gap-3 mb-3 cursor-pointer">
+          <input type="checkbox" id="set-manual" checked class="w-5 h-5 accent-emerald-500 rounded">
+          <span class="text-sm font-bold text-slate-300">Enable Manual Entry <span class="text-[10px] text-slate-500 block">(Physical Game Tracker)</span></span>
+        </label>
+        
+        <label class="flex items-center gap-3 mb-3 cursor-pointer">
+          <input type="checkbox" id="set-risk" checked class="w-5 h-5 accent-emerald-500 rounded">
+          <span class="text-sm font-bold text-slate-300">Show Bust Risk & Advice</span>
+        </label>
+        
+        <label class="flex items-center gap-3 cursor-pointer">
+          <input type="checkbox" id="set-count" checked class="w-5 h-5 accent-emerald-500 rounded">
+          <span class="text-sm font-bold text-slate-300">Show Remaining Cards Count</span>
+        </label>
+      </div>
+
       <button onclick="hostGame()" class="w-full bg-emerald-600 hover:bg-emerald-500 py-4 rounded-xl font-bold text-white shadow-lg shadow-emerald-900/50 transition text-lg mb-4">
         Host New Game
       </button>
@@ -64,11 +89,11 @@
     <header class="flex justify-between items-center mb-4 border-b border-slate-700 pb-4 gap-2">
       <div class="flex-shrink-0">
         <h1 class="text-xl font-bold text-emerald-400 leading-tight">Flip 7</h1>
-        <p class="text-sm text-slate-400">Pile: <span id="cards-remaining">94</span> cards</p>
+        <p class="text-sm text-slate-400" id="pile-container">Pile: <span id="cards-remaining">94</span> cards</p>
       </div>
       <div class="flex flex-wrap justify-end gap-2">
         <button onclick="undoAction()" class="bg-amber-600 hover:bg-amber-500 text-white px-3 py-2 rounded-lg text-xs font-bold transition shadow">
-          Undo
+          Undo Last
         </button>
         <button onclick="reshuffleDeckButton()" class="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-2 rounded-lg text-xs font-bold transition shadow">
           Shuffle
@@ -100,12 +125,12 @@
       
       <div class="mt-4">
         <div class="flex justify-between items-end mb-2">
-          <p class="text-xs text-slate-400">Active Cards <span id="tap-undo-text">(Tap to remove)</span></p>
+          <p class="text-xs text-slate-400">Active Cards</p>
           <span id="forced-draw-indicator" class="hidden text-xs font-bold text-rose-100 bg-rose-600 px-2 py-1 rounded shadow animate-pulse">3 FORCED DRAWS LEFT</span>
         </div>
         
         <div id="banked-cards-container" class="mb-2 hidden bg-slate-900/60 p-2 rounded-lg border border-slate-700">
-          <p class="text-[10px] text-amber-400 font-bold uppercase mb-1 tracking-wider">Banked Actions (Resolves if survived)</p>
+          <p class="text-[10px] text-amber-400 font-bold uppercase mb-1 tracking-wider">Banked Actions</p>
           <div id="banked-cards" class="flex flex-wrap gap-2"></div>
         </div>
         
@@ -123,21 +148,20 @@
        </div>
        <div id="my-cards" class="flex flex-wrap gap-1.5 min-h-[32px] relative z-10"></div>
        
-       <!-- Status Overlay Effects -->
        <div id="my-frozen-overlay" class="hidden absolute inset-0 bg-blue-500/10 backdrop-blur-[1px] z-0 pointer-events-none border-2 border-blue-500/50 rounded-xl"></div>
        <div id="my-busted-overlay" class="hidden absolute inset-0 bg-rose-500/10 backdrop-blur-[1px] z-0 pointer-events-none border-2 border-rose-500/50 rounded-xl"></div>
     </div>
 
     <!-- Controls -->
     <div class="grid grid-cols-2 gap-3 mb-2">
-      <button id="stay-btn" onclick="stayAction()" class="col-span-1 bg-slate-700 hover:bg-slate-600 py-3 rounded-xl font-bold transition text-slate-200 shadow disabled:opacity-30 disabled:cursor-not-allowed">
+      <button id="stay-btn" onclick="stayAction()" class="col-span-2 sm:col-span-1 bg-slate-700 hover:bg-slate-600 py-3 rounded-xl font-bold transition text-slate-200 shadow disabled:opacity-30 disabled:cursor-not-allowed">
         Stay
       </button>
       <button id="draw-btn" onclick="openManualDraw()" class="col-span-1 bg-emerald-600 hover:bg-emerald-500 py-3 rounded-xl font-bold text-white shadow-lg shadow-emerald-900/50 transition disabled:opacity-30 disabled:cursor-not-allowed">
         + Manual
       </button>
-      <button id="random-draw-btn" onclick="randomDraw()" class="col-span-2 bg-cyan-600 hover:bg-cyan-500 py-4 rounded-xl font-bold text-white shadow-lg shadow-cyan-900/50 transition text-lg flex items-center justify-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed">
-        <span class="text-2xl leading-none mb-1">🎲</span> Auto Draw
+      <button id="random-draw-btn" onclick="randomDraw()" class="col-span-1 bg-cyan-600 hover:bg-cyan-500 py-4 rounded-xl font-bold text-white shadow-lg shadow-cyan-900/50 transition text-lg flex items-center justify-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed">
+        <span class="text-2xl leading-none mb-1">🎲</span> Auto
       </button>
     </div>
   </div>
@@ -146,7 +170,7 @@
   <div id="card-modal" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-end sm:items-center justify-center z-[60]">
     <div class="bg-slate-800 w-full sm:w-[400px] sm:rounded-2xl rounded-t-2xl p-5 max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-700">
       <div class="flex justify-between items-center mb-6">
-        <h3 class="text-xl font-bold">Select Drawn Card</h3>
+        <h3 class="text-xl font-bold" id="card-modal-title">Select Drawn Card</h3>
         <button onclick="document.getElementById('card-modal').classList.add('hidden')" class="text-slate-400 text-3xl px-2 leading-none hover:text-white">&times;</button>
       </div>
       <h4 class="text-sm font-bold text-slate-400 mb-3 tracking-wide uppercase">Numbers</h4>
@@ -217,6 +241,8 @@
     let turnStack = []; 
     let forcedDrawsLeft = 0;
     
+    let gameSettings = { autoDraw: true, manualEntry: true, showRisk: true, showCount: true };
+    
     let myPlayerId = 'usr_' + Math.random().toString(36).substr(2, 9);
     let myName = "Player";
     let isHost = false;
@@ -224,7 +250,6 @@
     let lastActionId = 0;
     let previousStateBackup = null; 
 
-    // Bind exports
     window.hostGame = hostGame;
     window.joinGame = joinGame;
     window.startGame = startGame;
@@ -236,9 +261,7 @@
     window.startNextRound = startNextRound;
     window.newGame = newGame;
     window.reshuffleDeckButton = reshuffleDeckButton;
-    window.removeCard = removeCard;
 
-    // --- SAFETY SANITIZER ---
     function deepClone(obj) {
         return JSON.parse(JSON.stringify(obj));
     }
@@ -253,7 +276,7 @@
       const container = document.getElementById('toast-container');
       const toast = document.createElement('div');
       let bgClass = 'bg-slate-800 border-slate-600';
-      if (message.includes('BUST!') || message.includes('None') || message.includes('No one else') || message.includes('Error')) bgClass = 'bg-rose-700 border-rose-500';
+      if (message.includes('BUST!') || message.includes('None') || message.includes('No one else') || message.includes('Error') || message.includes('empty')) bgClass = 'bg-rose-700 border-rose-500';
       if (message.includes('PREVENTED') || message.includes('survived') || message.includes('Undo')) bgClass = 'bg-emerald-700 border-emerald-500';
       if (message.includes('Action') || message.includes('Second Chance') || message.includes('FROZEN') || message.includes('yourself') || message.includes('banked')) bgClass = 'bg-indigo-700 border-indigo-500';
       if (message.includes('🎲')) bgClass = 'bg-cyan-700 border-cyan-500'; 
@@ -269,46 +292,56 @@
       }, 3000);
     }
 
-    // --- RE-ADDED MISSING GRID GENERATOR ---
+    // --- SMART CARD MODAL RENDERER ---
     function renderCardModalGrids() {
-      const numGrid = document.getElementById('number-grid');
-      numGrid.innerHTML = '';
-      for(let i=0; i<=12; i++) {
-        let count = deck.numbers[i];
-        let opacityAttr = count === 0 ? 'opacity-30 cursor-not-allowed grayscale' : 'hover:bg-slate-600';
-        let clickAttr = count === 0 ? '' : `onclick="handleDraw('${i}', 'number')"`;
-        
-        numGrid.innerHTML += `
-          <button ${clickAttr} class="bg-slate-700 ${opacityAttr} pt-3 pb-2 rounded-lg font-bold text-xl transition flex flex-col items-center leading-none shadow-sm">
-            ${i}
-            <span class="text-[11px] text-slate-400 font-normal mt-1 block">x${count}</span>
-          </button>`;
-      }
-      
-      const actionsGrid = document.getElementById('action-grid');
-      actionsGrid.innerHTML = '';
-      Object.keys(deck.modifiers).forEach(m => {
-        let count = deck.modifiers[m];
-        let opacityAttr = count === 0 ? 'opacity-30 cursor-not-allowed grayscale' : 'hover:bg-blue-800';
-        let clickAttr = count === 0 ? '' : `onclick="handleDraw('${m}', 'modifier')"`;
-        
-        actionsGrid.innerHTML += `
-          <button ${clickAttr} class="bg-blue-900 ${opacityAttr} pt-3 pb-2 rounded-lg font-bold text-sm text-blue-100 border border-blue-700 transition flex flex-col items-center leading-none shadow-sm">
-            ${m}
-            <span class="text-[11px] text-blue-300 font-normal mt-1 block">x${count}</span>
-          </button>`;
-      });
-      Object.keys(deck.actions).forEach(a => {
-        let count = deck.actions[a];
-        let opacityAttr = count === 0 ? 'opacity-30 cursor-not-allowed grayscale' : 'hover:bg-purple-800';
-        let clickAttr = count === 0 ? '' : `onclick="handleDraw('${a}', 'action')"`;
-        
-        actionsGrid.innerHTML += `
-          <button ${clickAttr} class="bg-purple-900 ${opacityAttr} pt-3 pb-2 rounded-lg font-bold text-xs text-purple-100 border border-purple-700 transition flex flex-col items-center leading-none shadow-sm">
-            ${a}
-            <span class="text-[11px] text-purple-300 font-normal mt-1 block">x${count}</span>
-          </button>`;
-      });
+        let amIActivePlayer = isMyTurn();
+        let canDraw = gameSettings.manualEntry && amIActivePlayer;
+
+        // Change Title based on mode
+        document.getElementById('card-modal-title').innerText = canDraw ? "Select Drawn Card" : "Deck Remaining Viewer";
+
+        const renderButton = (key, count, type, bgBase, hoverClass, textColor) => {
+            let opacityAttr = '';
+            let clickAttr = '';
+            let countSpan = gameSettings.showCount ? `<span class="text-[11px] ${textColor} opacity-80 font-normal mt-1 block">x${count}</span>` : '';
+
+            if (canDraw) {
+                if (gameSettings.showCount) {
+                    opacityAttr = count === 0 ? 'opacity-30 cursor-not-allowed grayscale' : `${hoverClass} active:scale-95 cursor-pointer`;
+                    clickAttr = count === 0 ? `onclick="showToast('Cannot draw — that card is empty!')"` : `onclick="handleDraw('${key}', '${type}')"`;
+                } else {
+                    opacityAttr = `${hoverClass} active:scale-95 cursor-pointer`; 
+                    clickAttr = `onclick="handleDraw('${key}', '${type}')"`;
+                }
+            } else {
+                if (gameSettings.showCount) {
+                    opacityAttr = count === 0 ? 'opacity-30 cursor-not-allowed grayscale' : 'cursor-default';
+                } else {
+                    opacityAttr = 'cursor-default';
+                }
+            }
+
+            return `
+              <button ${clickAttr} class="${bgBase} ${opacityAttr} pt-3 pb-2 rounded-lg font-bold transition flex flex-col items-center leading-none shadow-sm border border-black/20">
+                <span class="text-base">${key}</span>
+                ${countSpan}
+              </button>`;
+        };
+
+        const numGrid = document.getElementById('number-grid');
+        numGrid.innerHTML = '';
+        for(let i=0; i<=12; i++) {
+            numGrid.innerHTML += renderButton(i, deck.numbers[i], 'number', 'bg-slate-700 text-white', 'hover:bg-slate-600', 'text-slate-300');
+        }
+
+        const actionsGrid = document.getElementById('action-grid');
+        actionsGrid.innerHTML = '';
+        Object.keys(deck.modifiers).forEach(m => {
+            actionsGrid.innerHTML += renderButton(m, deck.modifiers[m], 'modifier', 'bg-blue-900 text-blue-100', 'hover:bg-blue-800', 'text-blue-300');
+        });
+        Object.keys(deck.actions).forEach(a => {
+            actionsGrid.innerHTML += renderButton(a, deck.actions[a], 'action', 'bg-purple-900 text-purple-100', 'hover:bg-purple-800', 'text-purple-300');
+        });
     }
 
     // --- LOBBY SYSTEM ---
@@ -317,11 +350,23 @@
       currentRoomCode = Math.random().toString(36).substr(2, 4).toUpperCase();
       isHost = true;
       
+      let auto = document.getElementById('set-auto').checked;
+      let manual = document.getElementById('set-manual').checked;
+      if(!auto && !manual) return alert("You must enable at least one draw method!");
+
+      let initialSettings = {
+        autoDraw: auto,
+        manualEntry: manual,
+        showRisk: document.getElementById('set-risk').checked,
+        showCount: document.getElementById('set-count').checked
+      };
+      
       let newPlayer = { id: myPlayerId, name: myName, hand: [], bankedActions: [], secondChance: false, roundStatus: 'active', totalScore: 0 };
       
       set(ref(db, `rooms/${currentRoomCode}`), {
         status: 'lobby',
         gameState: {
+          settings: initialSettings,
           deck: deepClone(DECK_TEMPLATE),
           players: [newPlayer],
           currentPlayerIndex: 0,
@@ -378,6 +423,8 @@
             if (!data) return; 
 
             let state = data.gameState || {};
+            
+            gameSettings = state.settings || { autoDraw: true, manualEntry: true, showRisk: true, showCount: true };
             
             let defaultDeck = deepClone(DECK_TEMPLATE);
             deck = state.deck || defaultDeck;
@@ -437,6 +484,7 @@
       if(!isHost) return;
       
       let stateUpdate = {
+        settings: gameSettings,
         deck, players, currentPlayerIndex: 0, turnStack: [], forcedDrawsLeft: 0,
         lastAction: { msg: "Game Started! Player 1 goes first.", id: Date.now() },
         previousState: null
@@ -451,6 +499,7 @@
     // --- SHARED STATE SYNC ---
     function broadcastAction(msg) {
       update(ref(db, `rooms/${currentRoomCode}/gameState`), {
+        settings: gameSettings,
         deck, players, currentPlayerIndex, turnStack, forcedDrawsLeft,
         lastAction: { msg: msg, id: Date.now() },
         previousState: previousStateBackup 
@@ -499,7 +548,7 @@
     }
 
     function openManualDraw() {
-      if(!isMyTurn()) return;
+      if (!gameSettings.manualEntry && !gameSettings.showCount) return; 
       document.getElementById('card-modal').classList.remove('hidden');
     }
 
@@ -518,7 +567,12 @@
 
     function handleDraw(value, type, isRandom = false) {
       if(!isMyTurn()) return;
-      if(deck[type + 's'][value] <= 0) return; 
+      if(deck[type + 's'][value] <= 0) {
+          if(!gameSettings.showCount) {
+             showToast(`Cannot draw ${value} — that card is empty!`);
+          }
+          return; 
+      }
       
       backupStateBeforeAction();
       document.getElementById('card-modal').classList.add('hidden');
@@ -730,7 +784,7 @@
        
        update(ref(db, `rooms/${currentRoomCode}`), { 
          status: 'playing',
-         gameState: { deck, players, currentPlayerIndex, turnStack, forcedDrawsLeft, lastAction: { msg: "New Round Started! Player 1 goes first.", id: Date.now() }, previousState: previousStateBackup }
+         gameState: { settings: gameSettings, deck, players, currentPlayerIndex, turnStack, forcedDrawsLeft, lastAction: { msg: "New Round Started! Player 1 goes first.", id: Date.now() }, previousState: previousStateBackup }
        });
     }
 
@@ -752,17 +806,8 @@
        
        update(ref(db, `rooms/${currentRoomCode}`), { 
          status: 'playing',
-         gameState: { deck, players, currentPlayerIndex, turnStack, forcedDrawsLeft, lastAction: { msg: "Game Hard Reset!", id: Date.now() }, previousState: previousStateBackup }
+         gameState: { settings: gameSettings, deck, players, currentPlayerIndex, turnStack, forcedDrawsLeft, lastAction: { msg: "Game Hard Reset!", id: Date.now() }, previousState: previousStateBackup }
        });
-    }
-
-    function removeCard(playerIndex, handIndex) {
-      if(!isMyTurn()) return;
-      backupStateBeforeAction();
-      const card = players[playerIndex].hand[handIndex];
-      deck[card.type + 's'][card.value]++;
-      players[playerIndex].hand.splice(handIndex, 1);
-      broadcastAction(`${players[playerIndex].name} returned a ${card.value} to the deck.`);
     }
 
     function reshuffleDeckButton() {
@@ -837,16 +882,13 @@
           }
 
           const container = document.getElementById('active-cards');
-          document.getElementById('tap-undo-text').style.display = amIActivePlayer ? 'inline' : 'none';
-
           if (player.hand.length === 0) {
             container.innerHTML = '<span class="text-slate-500 text-sm italic py-2 px-1">Table is empty</span>';
           } else {
-            container.innerHTML = player.hand.map((c, i) => {
+            container.innerHTML = player.hand.map((c) => {
               if(!c) return '';
-              let clickAttr = amIActivePlayer ? `onclick="removeCard(${currentPlayerIndex}, ${i})"` : '';
-              let hoverClass = amIActivePlayer ? (c.type === 'number' ? 'hover:bg-white cursor-pointer' : 'hover:bg-indigo-400 cursor-pointer') : 'cursor-default';
-              return `<span ${clickAttr} class="inline-flex items-center justify-center min-w-[36px] h-9 px-3 rounded-lg text-sm font-bold shadow-sm transition transform ${amIActivePlayer ? 'hover:scale-105 active:scale-95' : ''} ${c.type === 'number' ? `bg-slate-200 text-slate-900 ${hoverClass}` : `bg-indigo-500 text-white ${hoverClass}`}">${c.value} ${amIActivePlayer ? '&times;' : ''}</span>`;
+              let bgClass = c.type === 'number' ? 'bg-slate-200 text-slate-900' : 'bg-indigo-500 text-white';
+              return `<span class="inline-flex items-center justify-center min-w-[36px] h-9 px-3 rounded-lg text-sm font-bold shadow-sm ${bgClass}">${c.value}</span>`;
             }).join('');
           }
 
@@ -889,45 +931,92 @@
              }
           }
 
+          // DYNAMIC CONTROLS LAYOUT
           const stayBtn = document.getElementById('stay-btn');
           const drawBtn = document.getElementById('draw-btn');
           const randomDrawBtn = document.getElementById('random-draw-btn');
           
+          let manualOn = gameSettings.manualEntry;
+          let autoOn = gameSettings.autoDraw;
+          let countOn = gameSettings.showCount;
+
           stayBtn.disabled = !amIActivePlayer;
-          drawBtn.disabled = !amIActivePlayer;
-          randomDrawBtn.disabled = !amIActivePlayer;
+
+          if (manualOn || countOn) {
+              drawBtn.classList.remove('hidden');
+              drawBtn.disabled = false; 
+              
+              if (manualOn && amIActivePlayer) {
+                  drawBtn.innerText = forcedDrawsLeft > 0 ? `Manual (${forcedDrawsLeft})` : `+ Manual`;
+              } else {
+                  drawBtn.innerText = `🔍 View Deck`;
+              }
+          } else {
+              drawBtn.classList.add('hidden');
+          }
+
+          if (autoOn) {
+              randomDrawBtn.classList.remove('hidden');
+              randomDrawBtn.disabled = !amIActivePlayer;
+              if (forcedDrawsLeft > 0 && amIActivePlayer) {
+                  randomDrawBtn.innerHTML = `Auto (${forcedDrawsLeft})`;
+              } else {
+                  randomDrawBtn.innerHTML = `<span class="text-2xl leading-none mb-1">🎲</span> Auto`;
+              }
+          } else {
+              randomDrawBtn.classList.add('hidden');
+          }
+
+          stayBtn.className = stayBtn.className.replace(/col-span-[1-2]/g, '').replace('sm:col-span-1', '').trim();
+          drawBtn.className = drawBtn.className.replace(/col-span-[1-2]/g, '').trim();
+          randomDrawBtn.className = randomDrawBtn.className.replace(/col-span-[1-2]/g, '').trim();
+
+          drawBtn.classList.remove('bg-emerald-600', 'hover:bg-emerald-500', 'shadow-emerald-900/50', 'bg-rose-600', 'hover:bg-rose-500', 'shadow-rose-900/50');
+          randomDrawBtn.classList.remove('bg-cyan-600', 'hover:bg-cyan-500', 'shadow-cyan-900/50', 'bg-rose-600', 'hover:bg-rose-500', 'shadow-rose-900/50');
 
           const forcedIndicator = document.getElementById('forced-draw-indicator');
           const activeCardFrame = document.getElementById('active-player-card');
 
-          if (forcedDrawsLeft > 0) {
-            stayBtn.classList.add('hidden');
-            drawBtn.classList.replace('col-span-1', 'col-span-1');
-            randomDrawBtn.classList.replace('col-span-2', 'col-span-1');
-            
-            drawBtn.innerText = `Manual (${forcedDrawsLeft})`;
-            randomDrawBtn.innerHTML = `Auto (${forcedDrawsLeft})`;
-            
-            drawBtn.className = drawBtn.className.replace(/bg-emerald-600|hover:bg-emerald-500|shadow-emerald-900\/50/g, '').trim() + " bg-rose-600 hover:bg-rose-500 shadow-rose-900/50";
-            randomDrawBtn.className = randomDrawBtn.className.replace(/bg-cyan-600|hover:bg-cyan-500|shadow-cyan-900\/50/g, '').trim() + " bg-rose-600 hover:bg-rose-500 shadow-rose-900/50";
-            
-            activeCardFrame.classList.replace('border-slate-700', 'border-rose-500');
-            forcedIndicator.classList.remove('hidden');
-            forcedIndicator.innerText = `${forcedDrawsLeft} FORCED DRAWS LEFT`;
+          if (forcedDrawsLeft > 0 && amIActivePlayer) {
+              stayBtn.classList.add('hidden');
+              drawBtn.classList.add('bg-rose-600', 'hover:bg-rose-500', 'shadow-rose-900/50');
+              randomDrawBtn.classList.add('bg-rose-600', 'hover:bg-rose-500', 'shadow-rose-900/50');
+              
+              let visibleCount = (!drawBtn.classList.contains('hidden') ? 1 : 0) + (!randomDrawBtn.classList.contains('hidden') ? 1 : 0);
+              if(visibleCount === 2) {
+                  drawBtn.classList.add('col-span-1');
+                  randomDrawBtn.classList.add('col-span-1');
+              } else {
+                  if(!drawBtn.classList.contains('hidden')) drawBtn.classList.add('col-span-2');
+                  if(!randomDrawBtn.classList.contains('hidden')) randomDrawBtn.classList.add('col-span-2');
+              }
+              
+              activeCardFrame.classList.replace('border-slate-700', 'border-rose-500');
+              forcedIndicator.classList.remove('hidden');
+              forcedIndicator.innerText = `${forcedDrawsLeft} FORCED DRAWS LEFT`;
           } else {
-            stayBtn.classList.remove('hidden');
-            randomDrawBtn.classList.replace('col-span-1', 'col-span-2');
-            
-            drawBtn.innerText = "+ Manual";
-            randomDrawBtn.innerHTML = `<span class="text-2xl leading-none mb-1">🎲</span> Auto Draw`;
-            
-            drawBtn.className = drawBtn.className.replace(/bg-rose-600|hover:bg-rose-500|shadow-rose-900\/50/g, '').trim() + " bg-emerald-600 hover:bg-emerald-500 shadow-emerald-900/50";
-            randomDrawBtn.className = randomDrawBtn.className.replace(/bg-rose-600|hover:bg-rose-500|shadow-rose-900\/50/g, '').trim() + " bg-cyan-600 hover:bg-cyan-500 shadow-cyan-900/50";
-            
-            activeCardFrame.classList.replace('border-rose-500', 'border-slate-700');
-            forcedIndicator.classList.add('hidden');
+              stayBtn.classList.remove('hidden');
+              drawBtn.classList.add('bg-emerald-600', 'hover:bg-emerald-500', 'shadow-emerald-900/50');
+              randomDrawBtn.classList.add('bg-cyan-600', 'hover:bg-cyan-500', 'shadow-cyan-900/50');
+              
+              let sideBtns = (!drawBtn.classList.contains('hidden') ? 1 : 0) + (!randomDrawBtn.classList.contains('hidden') ? 1 : 0);
+              if (sideBtns === 2) {
+                  stayBtn.classList.add('col-span-2', 'sm:col-span-1');
+                  drawBtn.classList.add('col-span-1');
+                  randomDrawBtn.classList.add('col-span-1');
+              } else if (sideBtns === 1) {
+                  stayBtn.classList.add('col-span-1');
+                  if(!drawBtn.classList.contains('hidden')) drawBtn.classList.add('col-span-1');
+                  if(!randomDrawBtn.classList.contains('hidden')) randomDrawBtn.classList.add('col-span-1');
+              } else {
+                  stayBtn.classList.add('col-span-2');
+              }
+              
+              activeCardFrame.classList.replace('border-rose-500', 'border-slate-700');
+              forcedIndicator.classList.add('hidden');
           }
 
+          // DYNAMIC RULES (MATH & PROBABILITIES)
           let totalCards = 0;
           let bustCardsRemaining = 0;
           const activeNumbers = new Set(player.hand.filter(c => c && c.type === 'number').map(c => c.value));
@@ -942,30 +1031,45 @@
           let probBust = player.secondChance ? 0 : (totalCards > 0 ? (bustCardsRemaining / totalCards) : 0);
           let currentScore = calculatePlayerScore(player);
           
-          document.getElementById('cards-remaining').innerText = totalCards;
+          if(gameSettings.showCount) {
+             document.getElementById('pile-container').classList.remove('hidden');
+             document.getElementById('cards-remaining').innerText = totalCards;
+          } else {
+             document.getElementById('pile-container').classList.add('hidden');
+          }
           
           const probEl = document.getElementById('prob-bust');
-          probEl.innerText = (probBust * 100).toFixed(1) + '%';
-          probEl.className = `text-2xl font-mono font-bold ${probBust >= 0.25 ? 'text-rose-500' : (probBust > 0.15 ? 'text-amber-400' : 'text-emerald-400')}`;
+          const badge = document.getElementById('recommendation-badge');
+
+          if(gameSettings.showRisk) {
+              probEl.innerText = (probBust * 100).toFixed(1) + '%';
+              probEl.className = `text-2xl font-mono font-bold ${probBust >= 0.25 ? 'text-rose-500' : (probBust > 0.15 ? 'text-amber-400' : 'text-emerald-400')}`;
+              
+              badge.classList.remove('hidden');
+              if (forcedDrawsLeft > 0) {
+                badge.innerText = "FORCED DRAW";
+                badge.className = "px-3 py-1 rounded-full text-[10px] font-bold bg-rose-500 text-white animate-pulse tracking-wider";
+              } else if (player.hand.length === 0) {
+                badge.innerText = "NEW HAND";
+                badge.className = "px-3 py-1 rounded-full text-[10px] font-bold bg-slate-700 text-slate-300 tracking-wider";
+              } else if (player.secondChance || probBust < 0.15) {
+                badge.innerText = "RECOMMEND: HIT";
+                badge.className = "px-3 py-1 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500 tracking-wider";
+              } else if (probBust >= 0.25) {
+                badge.innerText = "RECOMMEND: STAY";
+                badge.className = "px-3 py-1 rounded-full text-[10px] font-bold bg-rose-500/20 text-rose-400 border border-rose-500 tracking-wider";
+              } else {
+                badge.innerText = "CAUTION (SQUEEZE)";
+                badge.className = "px-3 py-1 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500 tracking-wider";
+              }
+          } else {
+              probEl.innerText = '??%';
+              probEl.className = 'text-2xl font-mono font-bold text-slate-600';
+              badge.classList.add('hidden');
+          }
+          
           document.getElementById('expected-value').innerText = currentScore;
 
-          const badge = document.getElementById('recommendation-badge');
-          if (forcedDrawsLeft > 0) {
-            badge.innerText = "FORCED DRAW";
-            badge.className = "px-3 py-1 rounded-full text-[10px] font-bold bg-rose-500 text-white animate-pulse tracking-wider";
-          } else if (player.hand.length === 0) {
-            badge.innerText = "NEW HAND";
-            badge.className = "px-3 py-1 rounded-full text-[10px] font-bold bg-slate-700 text-slate-300 tracking-wider";
-          } else if (player.secondChance || probBust < 0.15) {
-            badge.innerText = "RECOMMEND: HIT";
-            badge.className = "px-3 py-1 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500 tracking-wider";
-          } else if (probBust >= 0.25) {
-            badge.innerText = "RECOMMEND: STAY";
-            badge.className = "px-3 py-1 rounded-full text-[10px] font-bold bg-rose-500/20 text-rose-400 border border-rose-500 tracking-wider";
-          } else {
-            badge.innerText = "CAUTION (SQUEEZE)";
-            badge.className = "px-3 py-1 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500 tracking-wider";
-          }
       } catch (err) {
           console.error("UI Render Blocked:", err);
       }
