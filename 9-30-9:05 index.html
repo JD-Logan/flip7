@@ -1,0 +1,1123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Flip 7 Online</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  </style>
+</head>
+<body class="bg-slate-900 text-slate-100 p-4 font-sans antialiased max-w-md mx-auto relative min-h-screen flex flex-col">
+
+  <div id="toast-container" class="fixed top-4 left-1/2 -translate-x-1/2 z-[100] flex flex-col gap-2 pointer-events-none w-[90%] max-w-sm"></div>
+
+  <!-- SCREEN 1: HOME (Host / Join) -->
+  <div id="home-screen" class="absolute inset-0 z-50 bg-slate-900 flex flex-col items-center justify-center p-6 overflow-y-auto">
+    <h1 class="text-5xl font-bold text-emerald-400 mb-2 tracking-tight mt-10">Flip 7</h1>
+    <p class="text-slate-400 mb-6 font-semibold uppercase tracking-widest text-sm">Online Multiplayer</p>
+    
+    <div class="bg-slate-800 p-6 rounded-2xl w-full max-w-sm border border-slate-700 shadow-2xl mb-10">
+      <label class="block text-sm font-bold text-slate-300 mb-2 text-left">Your Player Name</label>
+      <input type="text" id="my-name-input" placeholder="e.g. John" class="w-full bg-slate-900 text-white rounded-xl px-4 py-4 text-lg border border-slate-600 focus:outline-none focus:border-emerald-500 mb-6 text-center font-bold">
+      
+      <!-- Room Rules (Host Only) -->
+      <div class="text-left bg-slate-900 p-4 rounded-xl mb-6 border border-slate-700 shadow-inner">
+        <h3 class="text-xs font-bold text-emerald-400 mb-3 uppercase tracking-wider">Room Rules (Host)</h3>
+        
+        <label class="flex items-center gap-3 mb-3 cursor-pointer">
+          <input type="checkbox" id="set-auto" checked class="w-5 h-5 accent-emerald-500 rounded">
+          <span class="text-sm font-bold text-slate-300">Enable Auto Draw <span class="text-[10px] text-slate-500 block">(Digital Game)</span></span>
+        </label>
+        
+        <label class="flex items-center gap-3 mb-3 cursor-pointer">
+          <input type="checkbox" id="set-manual" checked class="w-5 h-5 accent-emerald-500 rounded">
+          <span class="text-sm font-bold text-slate-300">Enable Manual Entry <span class="text-[10px] text-slate-500 block">(Physical Game Tracker)</span></span>
+        </label>
+        
+        <label class="flex items-center gap-3 mb-3 cursor-pointer">
+          <input type="checkbox" id="set-risk" checked class="w-5 h-5 accent-emerald-500 rounded">
+          <span class="text-sm font-bold text-slate-300">Show Bust Risk & Advice</span>
+        </label>
+        
+        <label class="flex items-center gap-3 cursor-pointer">
+          <input type="checkbox" id="set-count" checked class="w-5 h-5 accent-emerald-500 rounded">
+          <span class="text-sm font-bold text-slate-300">Show Remaining Cards Count</span>
+        </label>
+      </div>
+
+      <button onclick="hostGame()" class="w-full bg-emerald-600 hover:bg-emerald-500 py-4 rounded-xl font-bold text-white shadow-lg shadow-emerald-900/50 transition text-lg mb-4">
+        Host New Game
+      </button>
+      
+      <div class="relative flex py-2 items-center mb-4">
+        <div class="flex-grow border-t border-slate-600"></div>
+        <span class="flex-shrink-0 mx-4 text-slate-500 font-bold text-sm">OR</span>
+        <div class="flex-grow border-t border-slate-600"></div>
+      </div>
+
+      <div class="flex gap-2">
+        <input type="text" id="join-code-input" placeholder="CODE" maxlength="4" class="w-1/2 bg-slate-900 text-white rounded-xl px-4 py-4 text-xl border border-slate-600 focus:outline-none focus:border-cyan-500 text-center font-bold uppercase tracking-widest">
+        <button onclick="joinGame()" class="w-1/2 bg-cyan-600 hover:bg-cyan-500 py-4 rounded-xl font-bold text-white shadow-lg shadow-cyan-900/50 transition text-lg">
+          Join Room
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCREEN 2: LOBBY -->
+  <div id="lobby-screen" class="hidden absolute inset-0 z-40 bg-slate-900 flex flex-col items-center justify-center p-6">
+    <h2 class="text-2xl font-bold text-slate-300 mb-2">Room Code:</h2>
+    <div id="display-room-code" class="text-6xl font-black text-emerald-400 tracking-widest mb-8 border-4 border-emerald-500/30 bg-emerald-900/20 px-8 py-4 rounded-3xl">ABCD</div>
+    
+    <div class="bg-slate-800 p-6 rounded-2xl w-full max-w-sm border border-slate-700 shadow-2xl flex flex-col max-h-[50vh]">
+      <h3 class="text-sm font-bold text-slate-400 mb-4 uppercase tracking-wider border-b border-slate-700 pb-2">Players Joined</h3>
+      <div id="lobby-players-list" class="flex flex-col gap-3 overflow-y-auto no-scrollbar mb-6 flex-grow">
+        <!-- Players injected here -->
+      </div>
+      <button id="start-game-btn" onclick="startGame()" class="hidden w-full bg-emerald-600 hover:bg-emerald-500 py-4 rounded-xl font-bold text-white shadow-lg shadow-emerald-900/50 transition text-lg mt-auto">
+        Start Game
+      </button>
+      <p id="waiting-host-msg" class="text-sm text-amber-400 font-bold text-center animate-pulse">Waiting for host to start...</p>
+    </div>
+  </div>
+
+  <!-- SCREEN 3: MAIN GAME UI -->
+  <div id="game-ui" class="hidden flex flex-col h-full min-h-[95vh] relative z-10">
+    <header class="flex justify-between items-center mb-4 border-b border-slate-700 pb-4 gap-2">
+      <div class="flex-shrink-0">
+        <h1 class="text-xl font-bold text-emerald-400 leading-tight">Flip 7</h1>
+        <p class="text-sm text-slate-400" id="pile-container">Pile: <span id="cards-remaining">94</span> cards</p>
+      </div>
+      <div class="flex flex-wrap justify-end gap-2">
+        <button onclick="undoAction()" class="bg-amber-600 hover:bg-amber-500 text-white px-3 py-2 rounded-lg text-xs font-bold transition shadow">
+          Undo Last
+        </button>
+        <button onclick="reshuffleDeckButton()" class="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-2 rounded-lg text-xs font-bold transition shadow">
+          Shuffle
+        </button>
+      </div>
+    </header>
+
+    <div class="flex gap-2 overflow-x-auto pb-2 mb-4 no-scrollbar" id="player-status-bar"></div>
+
+    <!-- Active Player Focus -->
+    <div class="bg-slate-800 p-4 rounded-xl mb-4 shadow-lg border border-slate-700 transition-all duration-300 relative" id="active-player-card">
+      <div class="flex justify-between items-center mb-2">
+        <h2 class="text-lg font-bold">
+          <span id="current-player-name" class="text-emerald-400">Player</span><span id="turn-suffix">'s Turn</span>
+        </h2>
+        <span id="recommendation-badge" class="px-3 py-1 rounded-full text-[10px] sm:text-xs font-bold bg-slate-700 text-slate-300">AWAITING DRAW</span>
+      </div>
+      
+      <div class="grid grid-cols-2 gap-4 mt-4">
+        <div class="bg-slate-900 p-3 rounded-lg text-center shadow-inner border border-slate-800">
+          <p class="text-xs text-slate-400 mb-1">Bust Risk</p>
+          <p id="prob-bust" class="text-2xl font-mono font-bold text-emerald-400">0.0%</p>
+        </div>
+        <div class="bg-slate-900 p-3 rounded-lg text-center shadow-inner border border-slate-800">
+          <p class="text-xs text-slate-400 mb-1">Current Points</p>
+          <p id="expected-value" class="text-2xl font-mono font-bold text-blue-400">0</p>
+        </div>
+      </div>
+      
+      <div class="mt-4">
+        <div class="flex justify-between items-end mb-2">
+          <p class="text-xs text-slate-400">Active Cards</p>
+          <span id="forced-draw-indicator" class="hidden text-xs font-bold text-rose-100 bg-rose-600 px-2 py-1 rounded shadow animate-pulse">3 FORCED DRAWS LEFT</span>
+        </div>
+        
+        <div id="banked-cards-container" class="mb-2 hidden bg-slate-900/60 p-2 rounded-lg border border-slate-700">
+          <p class="text-[10px] text-amber-400 font-bold uppercase mb-1 tracking-wider">Banked Actions</p>
+          <div id="banked-cards" class="flex flex-wrap gap-2"></div>
+        </div>
+        
+        <div id="active-cards" class="flex flex-wrap gap-2 min-h-[48px] bg-slate-900/50 p-2 rounded-lg border border-slate-700 border-dashed"></div>
+      </div>
+    </div>
+
+    <!-- MY PERSONAL DASHBOARD (Always Visible) -->
+    <div id="my-personal-board" class="mb-4 mt-auto bg-slate-900 p-3 rounded-xl border border-slate-700 shadow-inner flex flex-col gap-2 relative overflow-hidden">
+       <div class="flex justify-between items-center relative z-10">
+           <span class="font-bold text-sm text-cyan-400 flex items-center gap-2">
+             My Hand <span class="bg-slate-800 text-slate-300 px-2 py-0.5 rounded-full text-[10px] border border-slate-700">Pts: <span id="my-score">0</span></span>
+           </span>
+           <span id="my-status-badge" class="text-[10px] font-bold px-2 py-1 rounded bg-slate-700 shadow text-white tracking-wider uppercase">ACTIVE</span>
+       </div>
+       <div id="my-cards" class="flex flex-wrap gap-1.5 min-h-[32px] relative z-10"></div>
+       
+       <div id="my-frozen-overlay" class="hidden absolute inset-0 bg-blue-500/10 backdrop-blur-[1px] z-0 pointer-events-none border-2 border-blue-500/50 rounded-xl"></div>
+       <div id="my-busted-overlay" class="hidden absolute inset-0 bg-rose-500/10 backdrop-blur-[1px] z-0 pointer-events-none border-2 border-rose-500/50 rounded-xl"></div>
+    </div>
+
+    <!-- Controls -->
+    <div class="grid grid-cols-2 gap-3 mb-2">
+      <button id="stay-btn" onclick="stayAction()" class="col-span-2 sm:col-span-1 bg-slate-700 hover:bg-slate-600 py-3 rounded-xl font-bold transition text-slate-200 shadow disabled:opacity-30 disabled:cursor-not-allowed">
+        Stay
+      </button>
+      <button id="draw-btn" onclick="openManualDraw()" class="col-span-1 bg-emerald-600 hover:bg-emerald-500 py-3 rounded-xl font-bold text-white shadow-lg shadow-emerald-900/50 transition disabled:opacity-30 disabled:cursor-not-allowed">
+        + Manual
+      </button>
+      <button id="random-draw-btn" onclick="randomDraw()" class="col-span-1 bg-cyan-600 hover:bg-cyan-500 py-4 rounded-xl font-bold text-white shadow-lg shadow-cyan-900/50 transition text-lg flex items-center justify-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed">
+        <span class="text-2xl leading-none mb-1">🎲</span> Auto
+      </button>
+    </div>
+  </div>
+
+  <!-- DRAW CARD MODAL -->
+  <div id="card-modal" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-end sm:items-center justify-center z-[60]">
+    <div class="bg-slate-800 w-full sm:w-[400px] sm:rounded-2xl rounded-t-2xl p-5 max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-700">
+      <div class="flex justify-between items-center mb-6">
+        <h3 class="text-xl font-bold" id="card-modal-title">Select Drawn Card</h3>
+        <button onclick="document.getElementById('card-modal').classList.add('hidden')" class="text-slate-400 text-3xl px-2 leading-none hover:text-white">&times;</button>
+      </div>
+      <h4 class="text-sm font-bold text-slate-400 mb-3 tracking-wide uppercase">Numbers</h4>
+      <div class="grid grid-cols-4 gap-2 mb-8" id="number-grid"></div>
+      <h4 class="text-sm font-bold text-slate-400 mb-3 tracking-wide uppercase">Modifiers & Actions</h4>
+      <div class="grid grid-cols-3 gap-2" id="action-grid"></div>
+    </div>
+  </div>
+
+  <!-- TARGET SELECTION MODAL -->
+  <div id="target-modal" class="hidden fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center z-[70]">
+    <div class="bg-slate-800 w-[90%] max-w-sm rounded-2xl p-6 border border-slate-600 shadow-2xl">
+      <h3 id="target-modal-title" class="text-xl font-bold mb-2 text-center text-white">Select Target</h3>
+      <p id="target-modal-desc" class="text-sm text-slate-400 text-center mb-6">Who receives this card?</p>
+      <div id="target-list" class="flex flex-col gap-3"></div>
+    </div>
+  </div>
+
+  <!-- ROUND TALLY SCREEN -->
+  <div id="tally-screen" class="hidden absolute inset-0 z-[80] bg-slate-900 flex flex-col items-center justify-center p-6 overflow-y-auto">
+    <h1 class="text-4xl font-bold text-emerald-400 mb-2">Round Over!</h1>
+    <p class="text-slate-400 mb-6">Score Summary</p>
+    
+    <div class="bg-slate-800 p-4 rounded-2xl w-full max-w-sm border border-slate-700 shadow-2xl mb-6">
+      <div id="tally-list" class="flex flex-col gap-3"></div>
+    </div>
+    
+    <div class="flex flex-col gap-3 w-full max-w-sm">
+      <button onclick="startNextRound()" class="w-full bg-emerald-600 hover:bg-emerald-500 py-4 rounded-xl font-bold text-white shadow-lg shadow-emerald-900/50 transition text-lg">
+        Start Next Round
+      </button>
+      <button onclick="undoAction()" class="w-full bg-amber-600 hover:bg-amber-500 py-3 rounded-xl font-bold text-white shadow shadow-amber-900/50 transition">
+        Wait, Undo Last Action!
+      </button>
+      <button onclick="newGame()" class="w-full bg-rose-700 hover:bg-rose-600 py-3 rounded-xl font-bold text-white shadow shadow-rose-900/50 transition">
+        End Game & Start Fresh
+      </button>
+    </div>
+  </div>
+
+  <!-- FIREBASE MODULE & MULTIPLAYER LOGIC -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.4.0/firebase-app.js";
+    import { getDatabase, ref, set, get, onValue, update } from "https://www.gstatic.com/firebasejs/10.4.0/firebase-database.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyALWoV7rSda1UFJ1VfNe-RkfwzsZJ-vK60",
+      authDomain: "flip7-cb06e.firebaseapp.com",
+      databaseURL: "https://flip7-cb06e-default-rtdb.firebaseio.com",
+      projectId: "flip7-cb06e",
+      storageBucket: "flip7-cb06e.firebasestorage.app",
+      messagingSenderId: "72823137813",
+      appId: "1:72823137813:web:52101c2a69446b05e7501c"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
+    const DECK_TEMPLATE = {
+      numbers: {0:1, 1:1, 2:2, 3:3, 4:4, 5:5, 6:6, 7:7, 8:8, 9:9, 10:10, 11:11, 12:12},
+      modifiers: {'+2':1, '+4':1, '+6':1, '+8':1, '+10':1, 'x2':1},
+      actions: {'Freeze':3, 'Flip3':3, 'SecondChance':3}
+    };
+
+    let deck = JSON.parse(JSON.stringify(DECK_TEMPLATE));
+    let players = [];
+    let currentPlayerIndex = 0;
+    let turnStack = []; 
+    let forcedDrawsLeft = 0;
+    
+    let gameSettings = { autoDraw: true, manualEntry: true, showRisk: true, showCount: true };
+    
+    let myPlayerId = 'usr_' + Math.random().toString(36).substr(2, 9);
+    let myName = "Player";
+    let isHost = false;
+    let currentRoomCode = "";
+    let lastActionId = 0;
+    let previousStateBackup = null; 
+
+    window.hostGame = hostGame;
+    window.joinGame = joinGame;
+    window.startGame = startGame;
+    window.openManualDraw = openManualDraw;
+    window.handleDraw = handleDraw;
+    window.randomDraw = randomDraw;
+    window.stayAction = stayAction;
+    window.undoAction = undoAction;
+    window.startNextRound = startNextRound;
+    window.newGame = newGame;
+    window.reshuffleDeckButton = reshuffleDeckButton;
+
+    function deepClone(obj) {
+        return JSON.parse(JSON.stringify(obj));
+    }
+    
+    function ensureArray(data) {
+        if (!data) return [];
+        let arr = Array.isArray(data) ? data : Object.values(data);
+        return arr.filter(item => item !== null && item !== undefined);
+    }
+
+    function showToast(message) {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      let bgClass = 'bg-slate-800 border-slate-600';
+      if (message.includes('BUST!') || message.includes('None') || message.includes('No one else') || message.includes('Error') || message.includes('empty')) bgClass = 'bg-rose-700 border-rose-500';
+      if (message.includes('PREVENTED') || message.includes('survived') || message.includes('Undo')) bgClass = 'bg-emerald-700 border-emerald-500';
+      if (message.includes('Action') || message.includes('Second Chance') || message.includes('FROZEN') || message.includes('yourself') || message.includes('banked')) bgClass = 'bg-indigo-700 border-indigo-500';
+      if (message.includes('🎲')) bgClass = 'bg-cyan-700 border-cyan-500'; 
+
+      toast.className = `${bgClass} border text-white px-4 py-3 rounded-lg shadow-xl text-sm font-bold transform transition-all duration-300 translate-y-[-100%] opacity-0 text-center z-[100]`;
+      toast.innerText = message;
+      
+      container.appendChild(toast);
+      requestAnimationFrame(() => toast.classList.remove('translate-y-[-100%]', 'opacity-0'));
+      setTimeout(() => {
+        toast.classList.add('opacity-0');
+        setTimeout(() => toast.remove(), 300);
+      }, 3000);
+    }
+
+    // --- SMART CARD MODAL RENDERER ---
+    function renderCardModalGrids() {
+        let amIActivePlayer = isMyTurn();
+        let canDraw = gameSettings.manualEntry && amIActivePlayer;
+
+        // Change Title based on mode
+        document.getElementById('card-modal-title').innerText = canDraw ? "Select Drawn Card" : "Deck Remaining Viewer";
+
+        const renderButton = (key, count, type, bgBase, hoverClass, textColor) => {
+            let opacityAttr = '';
+            let clickAttr = '';
+            let countSpan = gameSettings.showCount ? `<span class="text-[11px] ${textColor} opacity-80 font-normal mt-1 block">x${count}</span>` : '';
+
+            if (canDraw) {
+                if (gameSettings.showCount) {
+                    opacityAttr = count === 0 ? 'opacity-30 cursor-not-allowed grayscale' : `${hoverClass} active:scale-95 cursor-pointer`;
+                    clickAttr = count === 0 ? `onclick="showToast('Cannot draw — that card is empty!')"` : `onclick="handleDraw('${key}', '${type}')"`;
+                } else {
+                    opacityAttr = `${hoverClass} active:scale-95 cursor-pointer`; 
+                    clickAttr = `onclick="handleDraw('${key}', '${type}')"`;
+                }
+            } else {
+                if (gameSettings.showCount) {
+                    opacityAttr = count === 0 ? 'opacity-30 cursor-not-allowed grayscale' : 'cursor-default';
+                } else {
+                    opacityAttr = 'cursor-default';
+                }
+            }
+
+            return `
+              <button ${clickAttr} class="${bgBase} ${opacityAttr} pt-3 pb-2 rounded-lg font-bold transition flex flex-col items-center leading-none shadow-sm border border-black/20">
+                <span class="text-base">${key}</span>
+                ${countSpan}
+              </button>`;
+        };
+
+        const numGrid = document.getElementById('number-grid');
+        numGrid.innerHTML = '';
+        for(let i=0; i<=12; i++) {
+            numGrid.innerHTML += renderButton(i, deck.numbers[i], 'number', 'bg-slate-700 text-white', 'hover:bg-slate-600', 'text-slate-300');
+        }
+
+        const actionsGrid = document.getElementById('action-grid');
+        actionsGrid.innerHTML = '';
+        Object.keys(deck.modifiers).forEach(m => {
+            actionsGrid.innerHTML += renderButton(m, deck.modifiers[m], 'modifier', 'bg-blue-900 text-blue-100', 'hover:bg-blue-800', 'text-blue-300');
+        });
+        Object.keys(deck.actions).forEach(a => {
+            actionsGrid.innerHTML += renderButton(a, deck.actions[a], 'action', 'bg-purple-900 text-purple-100', 'hover:bg-purple-800', 'text-purple-300');
+        });
+    }
+
+    // --- LOBBY SYSTEM ---
+    function hostGame() {
+      myName = document.getElementById('my-name-input').value.trim() || "Host";
+      currentRoomCode = Math.random().toString(36).substr(2, 4).toUpperCase();
+      isHost = true;
+      
+      let auto = document.getElementById('set-auto').checked;
+      let manual = document.getElementById('set-manual').checked;
+      if(!auto && !manual) return alert("You must enable at least one draw method!");
+
+      let initialSettings = {
+        autoDraw: auto,
+        manualEntry: manual,
+        showRisk: document.getElementById('set-risk').checked,
+        showCount: document.getElementById('set-count').checked
+      };
+      
+      let newPlayer = { id: myPlayerId, name: myName, hand: [], bankedActions: [], secondChance: false, roundStatus: 'active', totalScore: 0 };
+      
+      set(ref(db, `rooms/${currentRoomCode}`), {
+        status: 'lobby',
+        gameState: {
+          settings: initialSettings,
+          deck: deepClone(DECK_TEMPLATE),
+          players: [newPlayer],
+          currentPlayerIndex: 0,
+          turnStack: [],
+          forcedDrawsLeft: 0,
+          lastAction: { msg: "Room created!", id: Date.now() },
+          previousState: null
+        }
+      });
+
+      document.getElementById('home-screen').classList.add('hidden');
+      document.getElementById('lobby-screen').classList.remove('hidden');
+      document.getElementById('display-room-code').innerText = currentRoomCode;
+      document.getElementById('start-game-btn').classList.remove('hidden');
+      document.getElementById('waiting-host-msg').classList.add('hidden');
+      
+      listenToRoom();
+    }
+
+    function joinGame() {
+      myName = document.getElementById('my-name-input').value.trim() || "Guest";
+      let code = document.getElementById('join-code-input').value.trim().toUpperCase();
+      
+      if(code.length !== 4) return alert("Enter a valid 4-letter code");
+
+      get(ref(db, `rooms/${code}`)).then(snapshot => {
+        if (snapshot.exists()) {
+          let data = snapshot.val();
+          if (data.status === 'playing') return alert("Game already in progress!");
+          
+          currentRoomCode = code;
+          isHost = false;
+          
+          let currentPlayers = ensureArray(data.gameState.players);
+          currentPlayers.push({ id: myPlayerId, name: myName, hand: [], bankedActions: [], secondChance: false, roundStatus: 'active', totalScore: 0 });
+          
+          update(ref(db, `rooms/${code}/gameState`), { players: currentPlayers });
+
+          document.getElementById('home-screen').classList.add('hidden');
+          document.getElementById('lobby-screen').classList.remove('hidden');
+          document.getElementById('display-room-code').innerText = currentRoomCode;
+          
+          listenToRoom();
+        } else {
+          alert("Room not found!");
+        }
+      });
+    }
+
+    function listenToRoom() {
+      onValue(ref(db, `rooms/${currentRoomCode}`), (snapshot) => {
+        try {
+            let data = snapshot.val();
+            if (!data) return; 
+
+            let state = data.gameState || {};
+            
+            gameSettings = state.settings || { autoDraw: true, manualEntry: true, showRisk: true, showCount: true };
+            
+            let defaultDeck = deepClone(DECK_TEMPLATE);
+            deck = state.deck || defaultDeck;
+            ['numbers', 'modifiers', 'actions'].forEach(cat => {
+                deck[cat] = Array.isArray(deck[cat]) ? Object.assign({}, deck[cat]) : (deck[cat] || {});
+                Object.keys(defaultDeck[cat]).forEach(k => {
+                    if (deck[cat][k] == null) deck[cat][k] = 0;
+                });
+            });
+
+            players = ensureArray(state.players);
+            players.forEach(p => {
+               p.hand = ensureArray(p.hand);
+               p.bankedActions = ensureArray(p.bankedActions);
+               p.roundStatus = p.roundStatus || 'active';
+               p.totalScore = p.totalScore || 0;
+               p.secondChance = !!p.secondChance;
+            });
+
+            currentPlayerIndex = state.currentPlayerIndex || 0;
+            turnStack = ensureArray(state.turnStack);
+            forcedDrawsLeft = state.forcedDrawsLeft || 0;
+            previousStateBackup = state.previousState || null;
+
+            if (state.lastAction && state.lastAction.id !== lastActionId) {
+              lastActionId = state.lastAction.id;
+              showToast(state.lastAction.msg);
+            }
+
+            if (data.status === 'lobby') {
+              const list = document.getElementById('lobby-players-list');
+              if(list) {
+                  list.innerHTML = players.map(p => `
+                    <div class="bg-slate-700 px-4 py-3 rounded-lg font-bold text-white shadow-inner flex justify-between">
+                      <span>${p.name}</span>
+                      ${players.length > 0 && p.id === players[0].id ? '<span class="text-xs text-amber-400 uppercase tracking-widest mt-1">Host</span>' : ''}
+                    </div>
+                  `).join('');
+              }
+            } else if (data.status === 'playing') {
+              document.getElementById('lobby-screen').classList.add('hidden');
+              document.getElementById('tally-screen').classList.add('hidden');
+              document.getElementById('game-ui').classList.remove('hidden');
+              updateUI(); 
+            } else if (data.status === 'tally') {
+              document.getElementById('game-ui').classList.add('hidden');
+              renderTallyScreen();
+            }
+        } catch(err) {
+            console.error("Firebase Sync Exception:", err);
+            showToast("Sync Error: Refreshing required.");
+        }
+      });
+    }
+
+    function startGame() {
+      if(!isHost) return;
+      
+      let stateUpdate = {
+        settings: gameSettings,
+        deck, players, currentPlayerIndex: 0, turnStack: [], forcedDrawsLeft: 0,
+        lastAction: { msg: "Game Started! Player 1 goes first.", id: Date.now() },
+        previousState: null
+      };
+      
+      update(ref(db, `rooms/${currentRoomCode}`), { 
+        status: 'playing',
+        gameState: stateUpdate
+      });
+    }
+
+    // --- SHARED STATE SYNC ---
+    function broadcastAction(msg) {
+      update(ref(db, `rooms/${currentRoomCode}/gameState`), {
+        settings: gameSettings,
+        deck, players, currentPlayerIndex, turnStack, forcedDrawsLeft,
+        lastAction: { msg: msg, id: Date.now() },
+        previousState: previousStateBackup 
+      });
+    }
+
+    function backupStateBeforeAction() {
+      previousStateBackup = {
+        deck: deepClone(deck),
+        players: deepClone(players),
+        currentPlayerIndex,
+        turnStack: deepClone(turnStack),
+        forcedDrawsLeft
+      };
+    }
+
+    function undoAction() {
+      if (!previousStateBackup) return showToast("Nothing left to undo!");
+      
+      deck = previousStateBackup.deck;
+      players = ensureArray(previousStateBackup.players);
+      players.forEach(p => {
+         p.hand = ensureArray(p.hand);
+         p.bankedActions = ensureArray(p.bankedActions);
+      });
+      currentPlayerIndex = previousStateBackup.currentPlayerIndex;
+      turnStack = ensureArray(previousStateBackup.turnStack);
+      forcedDrawsLeft = previousStateBackup.forcedDrawsLeft;
+      
+      document.getElementById('card-modal').classList.add('hidden');
+      document.getElementById('target-modal').classList.add('hidden');
+      
+      if(!document.getElementById('tally-screen').classList.contains('hidden')){
+         update(ref(db, `rooms/${currentRoomCode}`), { status: 'playing' });
+      }
+
+      broadcastAction(`${myName} used Undo!`);
+    }
+
+    // --- GAME ENGINE ---
+    function isMyTurn() {
+      if(!players || players.length === 0) return false;
+      let activePlayer = players[currentPlayerIndex];
+      if(!activePlayer) return false;
+      return activePlayer.id === myPlayerId;
+    }
+
+    function openManualDraw() {
+      if (!gameSettings.manualEntry && !gameSettings.showCount) return; 
+      document.getElementById('card-modal').classList.remove('hidden');
+    }
+
+    function randomDraw() {
+      if(!isMyTurn()) return;
+      let cardPool = [];
+      Object.entries(deck.numbers).forEach(([val, count]) => { for(let i=0; i<parseInt(count); i++) cardPool.push({value: val, type: 'number'}); });
+      Object.entries(deck.modifiers).forEach(([val, count]) => { for(let i=0; i<parseInt(count); i++) cardPool.push({value: val, type: 'modifier'}); });
+      Object.entries(deck.actions).forEach(([val, count]) => { for(let i=0; i<parseInt(count); i++) cardPool.push({value: val, type: 'action'}); });
+
+      if (cardPool.length === 0) return showToast("The deck is completely empty! Reshuffle needed.");
+      
+      let drawn = cardPool[Math.floor(Math.random() * cardPool.length)];
+      handleDraw(drawn.value, drawn.type, true);
+    }
+
+    function handleDraw(value, type, isRandom = false) {
+      if(!isMyTurn()) return;
+      if(deck[type + 's'][value] <= 0) {
+          if(!gameSettings.showCount) {
+             showToast(`Cannot draw ${value} — that card is empty!`);
+          }
+          return; 
+      }
+      
+      backupStateBeforeAction();
+      document.getElementById('card-modal').classList.add('hidden');
+      
+      let player = players[currentPlayerIndex];
+      let drawMsg = isRandom ? `🎲 ${player.name} auto-drew a ${value}` : `${player.name} drew a ${value}`;
+
+      if (type === 'action') {
+        if (value === 'SecondChance') {
+          deck.actions['SecondChance']--;
+          if (!player.secondChance) {
+            player.secondChance = true;
+            resolveDrawStep(`${drawMsg} & kept the Second Chance!`); 
+          } else {
+            let eligible = players.filter(p => !p.secondChance && p.roundStatus === 'active');
+            if (eligible.length === 0) {
+              resolveDrawStep(`${drawMsg} but everyone has one. Discarded!`);
+            } else {
+              openTargetModal("Pass Second Chance", "You already have one. Who gets this?", eligible, (targetIndex) => {
+                players[targetIndex].secondChance = true;
+                resolveDrawStep(`${player.name} gave a Second Chance to ${players[targetIndex].name}!`);
+              });
+            }
+          }
+        } 
+        else if (value === 'Flip3') {
+          deck.actions['Flip3']--;
+          if (forcedDrawsLeft > 0) {
+              player.bankedActions.push('Flip3');
+              resolveDrawStep(`${drawMsg} & banked it!`);
+              return;
+          }
+
+          let activePlayers = players.filter(p => p.roundStatus === 'active');
+          if (activePlayers.length === 1) {
+             turnStack.push({ returnIndex: currentPlayerIndex, previousForcedDraws: forcedDrawsLeft });
+             forcedDrawsLeft = 3;
+             broadcastAction(`${drawMsg}. No one else active, hijacked themselves!`);
+          } else {
+             openTargetModal("Flip Three!", "Who must draw 3 cards? (You can choose yourself)", activePlayers, (targetIndex) => {
+               turnStack.push({ returnIndex: currentPlayerIndex, previousForcedDraws: forcedDrawsLeft });
+               currentPlayerIndex = targetIndex;
+               forcedDrawsLeft = 3;
+               broadcastAction(`${drawMsg} & hijacked ${players[targetIndex].name}!`);
+             });
+          }
+        }
+        else if (value === 'Freeze') {
+          deck.actions['Freeze']--;
+          if (forcedDrawsLeft > 0) {
+              player.bankedActions.push('Freeze');
+              resolveDrawStep(`${drawMsg} & banked it!`);
+              return;
+          }
+
+          let activeOpponents = players.filter(p => p.id !== player.id && p.roundStatus === 'active');
+          if (activeOpponents.length === 0) {
+              player.roundStatus = 'frozen';
+              resolveDrawStep(`${drawMsg}. No one else active, froze themselves!`);
+          } else {
+              let activePlayers = players.filter(p => p.roundStatus === 'active');
+              openTargetModal("Freeze!", "Choose an active player to freeze.", activePlayers, (targetIndex) => {
+                players[targetIndex].roundStatus = 'frozen';
+                resolveDrawStep(`${drawMsg} & froze ${players[targetIndex].name}!`);
+              });
+          }
+        }
+      } 
+      else if (type === 'number') {
+        let activeNumbers = new Set(player.hand.filter(c => c && c.type === 'number').map(c => c.value));
+        deck.numbers[value]--;
+        
+        if (activeNumbers.has(value)) {
+          if (player.secondChance) {
+            player.secondChance = false;
+            resolveDrawStep(`🛡️ ${drawMsg}. BUST PREVENTED by Second Chance!`); 
+          } else {
+            player.hand = [];
+            player.bankedActions = []; 
+            player.roundStatus = 'busted';
+            popTurnStack(`${drawMsg} AND BUSTED!`); 
+          }
+        } else {
+          player.hand.push({value, type});
+          resolveDrawStep(drawMsg);
+        }
+      } 
+      else if (type === 'modifier') {
+        deck.modifiers[value]--;
+        player.hand.push({value, type});
+        resolveDrawStep(drawMsg);
+      }
+    }
+
+    function resolveDrawStep(actionMsg) {
+      if (forcedDrawsLeft > 0) {
+        forcedDrawsLeft--;
+        if (forcedDrawsLeft === 0) {
+          if (players[currentPlayerIndex].bankedActions.length > 0) {
+              processBankedActions(`${players[currentPlayerIndex].name} survived the Flip 3!`);
+          } else {
+              popTurnStack(`${players[currentPlayerIndex].name} survived the Flip 3!`); 
+          }
+        } else {
+          broadcastAction(actionMsg); 
+        }
+      } else {
+        advanceTurnLogic(actionMsg);
+      }
+    }
+
+    function processBankedActions(precedingMsg = "") {
+      let player = players[currentPlayerIndex];
+      if (!player.bankedActions || player.bankedActions.length === 0) {
+          popTurnStack(precedingMsg);
+          return;
+      }
+      
+      let action = player.bankedActions.shift();
+
+      if (action === 'Flip3') {
+          let activePlayers = players.filter(p => p.roundStatus === 'active');
+          if (activePlayers.length === 1) {
+              turnStack.push({ returnIndex: currentPlayerIndex, previousForcedDraws: forcedDrawsLeft });
+              forcedDrawsLeft = 3;
+              broadcastAction(`Banked Flip3 hit themselves!`);
+          } else {
+              openTargetModal("Banked Flip Three!", "Who must draw 3 cards?", activePlayers, (targetIndex) => {
+                  turnStack.push({ returnIndex: currentPlayerIndex, previousForcedDraws: forcedDrawsLeft });
+                  currentPlayerIndex = targetIndex;
+                  forcedDrawsLeft = 3;
+                  broadcastAction(`Banked Flip3 unleashed on ${players[targetIndex].name}!`);
+              });
+          }
+      } else if (action === 'Freeze') {
+          let activeOpponents = players.filter(p => p.id !== player.id && p.roundStatus === 'active');
+          if (activeOpponents.length === 0) {
+              player.roundStatus = 'frozen';
+              processBankedActions(`Banked Freeze froze themselves!`); 
+          } else {
+              let activePlayers = players.filter(p => p.roundStatus === 'active');
+              openTargetModal("Banked Freeze!", "Choose an active player to freeze.", activePlayers, (targetIndex) => {
+                  players[targetIndex].roundStatus = 'frozen';
+                  processBankedActions(`Banked Freeze froze ${players[targetIndex].name}!`);
+              });
+          }
+      }
+    }
+
+    function popTurnStack(msg) {
+      if (turnStack.length > 0) {
+        let previousState = turnStack.pop();
+        currentPlayerIndex = previousState.returnIndex; 
+        forcedDrawsLeft = previousState.previousForcedDraws;
+        
+        if (forcedDrawsLeft === 0 && players[currentPlayerIndex].bankedActions.length > 0) {
+            processBankedActions(msg);
+        } else if (forcedDrawsLeft === 0) {
+            advanceTurnLogic(msg);
+        } else {
+            broadcastAction(msg); 
+        }
+      } else {
+        forcedDrawsLeft = 0;
+        advanceTurnLogic(msg);
+      }
+    }
+
+    function stayAction() {
+      if(!isMyTurn()) return;
+      backupStateBeforeAction();
+      players[currentPlayerIndex].roundStatus = 'stayed';
+      advanceTurnLogic(`${players[currentPlayerIndex].name} Banked their cards!`);
+    }
+
+    function advanceTurnLogic(msg) {
+      turnStack = []; 
+      forcedDrawsLeft = 0;
+      
+      let activeCount = players.filter(p => p.roundStatus === 'active').length;
+      if (activeCount === 0) {
+         broadcastAction(msg);
+         setTimeout(() => update(ref(db, `rooms/${currentRoomCode}`), { status: 'tally' }), 200);
+         return;
+      }
+
+      let originalIndex = currentPlayerIndex;
+      do {
+        currentPlayerIndex = (currentPlayerIndex + 1) % players.length;
+      } while (players[currentPlayerIndex].roundStatus !== 'active' && currentPlayerIndex !== originalIndex);
+      
+      broadcastAction(msg || "Turn Advanced.");
+    }
+
+    function startNextRound() {
+       if(!isHost) return showToast("Only the host can start the next round.");
+       backupStateBeforeAction();
+       
+       players.forEach(p => {
+          p.totalScore += calculatePlayerScore(p);
+          p.hand = [];
+          p.bankedActions = [];
+          p.roundStatus = 'active';
+          p.secondChance = false;
+       });
+       currentPlayerIndex = 0; 
+       turnStack = [];
+       forcedDrawsLeft = 0;
+       
+       update(ref(db, `rooms/${currentRoomCode}`), { 
+         status: 'playing',
+         gameState: { settings: gameSettings, deck, players, currentPlayerIndex, turnStack, forcedDrawsLeft, lastAction: { msg: "New Round Started! Player 1 goes first.", id: Date.now() }, previousState: previousStateBackup }
+       });
+    }
+
+    function newGame() {
+       if(!isHost) return showToast("Only the host can reset the game.");
+       if(!confirm("End the game and reset all scores for everyone?")) return;
+       backupStateBeforeAction();
+       deck = deepClone(DECK_TEMPLATE);
+       players.forEach(p => {
+          p.hand = [];
+          p.bankedActions = [];
+          p.roundStatus = 'active';
+          p.secondChance = false;
+          p.totalScore = 0;
+       });
+       currentPlayerIndex = 0;
+       turnStack = [];
+       forcedDrawsLeft = 0;
+       
+       update(ref(db, `rooms/${currentRoomCode}`), { 
+         status: 'playing',
+         gameState: { settings: gameSettings, deck, players, currentPlayerIndex, turnStack, forcedDrawsLeft, lastAction: { msg: "Game Hard Reset!", id: Date.now() }, previousState: previousStateBackup }
+       });
+    }
+
+    function reshuffleDeckButton() {
+      backupStateBeforeAction();
+      deck = deepClone(DECK_TEMPLATE);
+      players.forEach(p => {
+        p.hand.forEach(card => deck[card.type + 's'][card.value]--);
+        if (p.secondChance) deck.actions['SecondChance']--;
+      });
+      broadcastAction("Discards shuffled back into the deck!");
+    }
+
+    function openTargetModal(title, desc, targetOptions, callback) {
+      document.getElementById('target-modal-title').innerText = title;
+      document.getElementById('target-modal-desc').innerText = desc;
+      const list = document.getElementById('target-list');
+      list.innerHTML = '';
+      
+      targetOptions.forEach(target => {
+        const btn = document.createElement('button');
+        btn.className = "w-full bg-slate-700 hover:bg-indigo-600 text-white font-bold py-4 rounded-xl transition text-lg";
+        btn.innerText = target.name;
+        btn.onclick = () => {
+          document.getElementById('target-modal').classList.add('hidden');
+          let globalIdx = players.findIndex(p => p.id === target.id);
+          callback(globalIdx);
+        };
+        list.appendChild(btn);
+      });
+      document.getElementById('target-modal').classList.remove('hidden');
+    }
+
+    function updateUI() {
+      try {
+          renderCardModalGrids(); 
+          
+          let player = players[currentPlayerIndex];
+          if(!player) return; 
+          
+          let amIActivePlayer = isMyTurn();
+
+          const statusBar = document.getElementById('player-status-bar');
+          statusBar.innerHTML = players.map((p, i) => {
+            let opacity = p.roundStatus === 'active' ? 'opacity-100' : 'opacity-40';
+            let bg = i === currentPlayerIndex ? 'bg-emerald-900/60 border-emerald-500 text-emerald-100 shadow-md scale-105 transition-transform' : 'bg-slate-800 border-slate-700 text-slate-400';
+            
+            let statusText = `${p.hand.length} CARDS`;
+            if (p.roundStatus === 'stayed') statusText = 'STAYED';
+            if (p.roundStatus === 'busted') statusText = 'BUSTED';
+            if (p.roundStatus === 'frozen') statusText = 'FROZEN';
+            let meIndicator = p.id === myPlayerId ? '*(You)*' : '';
+
+            return `
+            <div class="flex-shrink-0 px-4 py-2 rounded-xl border ${bg} ${opacity}">
+              <span class="font-bold text-sm whitespace-nowrap">${p.name} <span class="text-[10px] font-normal text-slate-300">${meIndicator}</span></span>
+              ${p.secondChance ? `<span class="ml-1 text-[10px] bg-amber-500 text-amber-950 px-1.5 py-0.5 rounded-full font-bold">SC</span>` : ''}
+              <div class="text-[10px] mt-1 tracking-wide font-bold">${statusText}</div>
+            </div>
+          `}).join('');
+
+          document.getElementById('current-player-name').innerText = amIActivePlayer ? "Your" : player.name;
+          document.getElementById('turn-suffix').innerText = amIActivePlayer ? " Turn" : "'s Turn";
+          
+          const bankedContainer = document.getElementById('banked-cards-container');
+          const bankedCards = document.getElementById('banked-cards');
+          if (player.bankedActions && player.bankedActions.length > 0) {
+             bankedContainer.classList.remove('hidden');
+             bankedCards.innerHTML = player.bankedActions.map(a => `<span class="inline-block px-3 py-1 rounded bg-purple-600 text-purple-100 text-xs font-bold shadow-sm">${a}</span>`).join('');
+          } else {
+             bankedContainer.classList.add('hidden');
+             bankedCards.innerHTML = '';
+          }
+
+          const container = document.getElementById('active-cards');
+          if (player.hand.length === 0) {
+            container.innerHTML = '<span class="text-slate-500 text-sm italic py-2 px-1">Table is empty</span>';
+          } else {
+            container.innerHTML = player.hand.map((c) => {
+              if(!c) return '';
+              let bgClass = c.type === 'number' ? 'bg-slate-200 text-slate-900' : 'bg-indigo-500 text-white';
+              return `<span class="inline-flex items-center justify-center min-w-[36px] h-9 px-3 rounded-lg text-sm font-bold shadow-sm ${bgClass}">${c.value}</span>`;
+            }).join('');
+          }
+
+          let myPlayer = players.find(p => p.id === myPlayerId);
+          if(myPlayer) {
+             document.getElementById('my-score').innerText = calculatePlayerScore(myPlayer);
+             
+             let statBadge = document.getElementById('my-status-badge');
+             let frozenOverlay = document.getElementById('my-frozen-overlay');
+             let bustedOverlay = document.getElementById('my-busted-overlay');
+             
+             frozenOverlay.classList.add('hidden');
+             bustedOverlay.classList.add('hidden');
+
+             if(myPlayer.roundStatus === 'active') {
+                statBadge.innerText = 'ACTIVE';
+                statBadge.className = 'text-[10px] font-bold px-2 py-1 rounded bg-emerald-600 text-white tracking-wider';
+             } else if(myPlayer.roundStatus === 'frozen') {
+                statBadge.innerText = '🧊 FROZEN';
+                statBadge.className = 'text-[10px] font-bold px-2 py-1 rounded bg-blue-500 text-white tracking-wider';
+                frozenOverlay.classList.remove('hidden');
+             } else if(myPlayer.roundStatus === 'busted') {
+                statBadge.innerText = '💥 BUSTED';
+                statBadge.className = 'text-[10px] font-bold px-2 py-1 rounded bg-rose-600 text-white tracking-wider';
+                bustedOverlay.classList.remove('hidden');
+             } else if(myPlayer.roundStatus === 'stayed') {
+                statBadge.innerText = '✅ STAYED';
+                statBadge.className = 'text-[10px] font-bold px-2 py-1 rounded bg-slate-500 text-white tracking-wider';
+             }
+
+             let myCardsDiv = document.getElementById('my-cards');
+             if(myPlayer.hand.length === 0) {
+                 myCardsDiv.innerHTML = '<span class="text-xs text-slate-500 italic flex items-center">No cards drawn yet</span>';
+             } else {
+                 myCardsDiv.innerHTML = myPlayer.hand.map(c => {
+                    if(!c) return '';
+                    let bg = c.type === 'number' ? 'bg-slate-200 text-slate-900' : 'bg-indigo-500 text-white';
+                    return `<span class="inline-flex items-center justify-center min-w-[32px] h-8 px-2 rounded text-xs font-bold shadow-sm ${bg}">${c.value}</span>`;
+                 }).join('');
+             }
+          }
+
+          // DYNAMIC CONTROLS LAYOUT
+          const stayBtn = document.getElementById('stay-btn');
+          const drawBtn = document.getElementById('draw-btn');
+          const randomDrawBtn = document.getElementById('random-draw-btn');
+          
+          let manualOn = gameSettings.manualEntry;
+          let autoOn = gameSettings.autoDraw;
+          let countOn = gameSettings.showCount;
+
+          stayBtn.disabled = !amIActivePlayer;
+
+          if (manualOn || countOn) {
+              drawBtn.classList.remove('hidden');
+              drawBtn.disabled = false; 
+              
+              if (manualOn && amIActivePlayer) {
+                  drawBtn.innerText = forcedDrawsLeft > 0 ? `Manual (${forcedDrawsLeft})` : `+ Manual`;
+              } else {
+                  drawBtn.innerText = `🔍 View Deck`;
+              }
+          } else {
+              drawBtn.classList.add('hidden');
+          }
+
+          if (autoOn) {
+              randomDrawBtn.classList.remove('hidden');
+              randomDrawBtn.disabled = !amIActivePlayer;
+              if (forcedDrawsLeft > 0 && amIActivePlayer) {
+                  randomDrawBtn.innerHTML = `Auto (${forcedDrawsLeft})`;
+              } else {
+                  randomDrawBtn.innerHTML = `<span class="text-2xl leading-none mb-1">🎲</span> Auto`;
+              }
+          } else {
+              randomDrawBtn.classList.add('hidden');
+          }
+
+          stayBtn.className = stayBtn.className.replace(/col-span-[1-2]/g, '').replace('sm:col-span-1', '').trim();
+          drawBtn.className = drawBtn.className.replace(/col-span-[1-2]/g, '').trim();
+          randomDrawBtn.className = randomDrawBtn.className.replace(/col-span-[1-2]/g, '').trim();
+
+          drawBtn.classList.remove('bg-emerald-600', 'hover:bg-emerald-500', 'shadow-emerald-900/50', 'bg-rose-600', 'hover:bg-rose-500', 'shadow-rose-900/50');
+          randomDrawBtn.classList.remove('bg-cyan-600', 'hover:bg-cyan-500', 'shadow-cyan-900/50', 'bg-rose-600', 'hover:bg-rose-500', 'shadow-rose-900/50');
+
+          const forcedIndicator = document.getElementById('forced-draw-indicator');
+          const activeCardFrame = document.getElementById('active-player-card');
+
+          if (forcedDrawsLeft > 0 && amIActivePlayer) {
+              stayBtn.classList.add('hidden');
+              drawBtn.classList.add('bg-rose-600', 'hover:bg-rose-500', 'shadow-rose-900/50');
+              randomDrawBtn.classList.add('bg-rose-600', 'hover:bg-rose-500', 'shadow-rose-900/50');
+              
+              let visibleCount = (!drawBtn.classList.contains('hidden') ? 1 : 0) + (!randomDrawBtn.classList.contains('hidden') ? 1 : 0);
+              if(visibleCount === 2) {
+                  drawBtn.classList.add('col-span-1');
+                  randomDrawBtn.classList.add('col-span-1');
+              } else {
+                  if(!drawBtn.classList.contains('hidden')) drawBtn.classList.add('col-span-2');
+                  if(!randomDrawBtn.classList.contains('hidden')) randomDrawBtn.classList.add('col-span-2');
+              }
+              
+              activeCardFrame.classList.replace('border-slate-700', 'border-rose-500');
+              forcedIndicator.classList.remove('hidden');
+              forcedIndicator.innerText = `${forcedDrawsLeft} FORCED DRAWS LEFT`;
+          } else {
+              stayBtn.classList.remove('hidden');
+              drawBtn.classList.add('bg-emerald-600', 'hover:bg-emerald-500', 'shadow-emerald-900/50');
+              randomDrawBtn.classList.add('bg-cyan-600', 'hover:bg-cyan-500', 'shadow-cyan-900/50');
+              
+              let sideBtns = (!drawBtn.classList.contains('hidden') ? 1 : 0) + (!randomDrawBtn.classList.contains('hidden') ? 1 : 0);
+              if (sideBtns === 2) {
+                  stayBtn.classList.add('col-span-2', 'sm:col-span-1');
+                  drawBtn.classList.add('col-span-1');
+                  randomDrawBtn.classList.add('col-span-1');
+              } else if (sideBtns === 1) {
+                  stayBtn.classList.add('col-span-1');
+                  if(!drawBtn.classList.contains('hidden')) drawBtn.classList.add('col-span-1');
+                  if(!randomDrawBtn.classList.contains('hidden')) randomDrawBtn.classList.add('col-span-1');
+              } else {
+                  stayBtn.classList.add('col-span-2');
+              }
+              
+              activeCardFrame.classList.replace('border-rose-500', 'border-slate-700');
+              forcedIndicator.classList.add('hidden');
+          }
+
+          // DYNAMIC RULES (MATH & PROBABILITIES)
+          let totalCards = 0;
+          let bustCardsRemaining = 0;
+          const activeNumbers = new Set(player.hand.filter(c => c && c.type === 'number').map(c => c.value));
+
+          Object.entries(deck.numbers).forEach(([val, count]) => {
+            totalCards += count;
+            if (activeNumbers.has(val)) bustCardsRemaining += count;
+          });
+          Object.values(deck.modifiers).forEach(count => totalCards += count);
+          Object.values(deck.actions).forEach(count => totalCards += count);
+
+          let probBust = player.secondChance ? 0 : (totalCards > 0 ? (bustCardsRemaining / totalCards) : 0);
+          let currentScore = calculatePlayerScore(player);
+          
+          if(gameSettings.showCount) {
+             document.getElementById('pile-container').classList.remove('hidden');
+             document.getElementById('cards-remaining').innerText = totalCards;
+          } else {
+             document.getElementById('pile-container').classList.add('hidden');
+          }
+          
+          const probEl = document.getElementById('prob-bust');
+          const badge = document.getElementById('recommendation-badge');
+
+          if(gameSettings.showRisk) {
+              probEl.innerText = (probBust * 100).toFixed(1) + '%';
+              probEl.className = `text-2xl font-mono font-bold ${probBust >= 0.25 ? 'text-rose-500' : (probBust > 0.15 ? 'text-amber-400' : 'text-emerald-400')}`;
+              
+              badge.classList.remove('hidden');
+              if (forcedDrawsLeft > 0) {
+                badge.innerText = "FORCED DRAW";
+                badge.className = "px-3 py-1 rounded-full text-[10px] font-bold bg-rose-500 text-white animate-pulse tracking-wider";
+              } else if (player.hand.length === 0) {
+                badge.innerText = "NEW HAND";
+                badge.className = "px-3 py-1 rounded-full text-[10px] font-bold bg-slate-700 text-slate-300 tracking-wider";
+              } else if (player.secondChance || probBust < 0.15) {
+                badge.innerText = "RECOMMEND: HIT";
+                badge.className = "px-3 py-1 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500 tracking-wider";
+              } else if (probBust >= 0.25) {
+                badge.innerText = "RECOMMEND: STAY";
+                badge.className = "px-3 py-1 rounded-full text-[10px] font-bold bg-rose-500/20 text-rose-400 border border-rose-500 tracking-wider";
+              } else {
+                badge.innerText = "CAUTION (SQUEEZE)";
+                badge.className = "px-3 py-1 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500 tracking-wider";
+              }
+          } else {
+              probEl.innerText = '??%';
+              probEl.className = 'text-2xl font-mono font-bold text-slate-600';
+              badge.classList.add('hidden');
+          }
+          
+          document.getElementById('expected-value').innerText = currentScore;
+
+      } catch (err) {
+          console.error("UI Render Blocked:", err);
+      }
+    }
+
+    function calculatePlayerScore(player) {
+       if(!player || !player.hand) return 0;
+       let score = 0;
+       let multiplier = 1;
+       player.hand.forEach(c => {
+         if (!c) return;
+         if (c.type === 'number') score += parseInt(c.value);
+         if (c.type === 'modifier') {
+           if (c.value === 'x2') multiplier = 2;
+           else score += parseInt(c.value.replace('+',''));
+         }
+       });
+       return score * multiplier;
+    }
+
+    function renderTallyScreen() {
+       const list = document.getElementById('tally-list');
+       list.innerHTML = '';
+       
+       players.forEach(p => {
+          let roundScore = calculatePlayerScore(p);
+          let newTotal = p.totalScore + roundScore;
+          
+          let statusBadge = '';
+          if (p.roundStatus === 'busted') statusBadge = '<span class="text-[10px] bg-rose-600 text-white px-2 py-0.5 rounded ml-2">BUSTED</span>';
+          else if (p.roundStatus === 'frozen') statusBadge = '<span class="text-[10px] bg-indigo-600 text-white px-2 py-0.5 rounded ml-2">FROZEN</span>';
+          else statusBadge = '<span class="text-[10px] bg-slate-600 text-white px-2 py-0.5 rounded ml-2">STAYED</span>';
+          
+          list.innerHTML += `
+             <div class="flex justify-between items-center bg-slate-700/50 p-3 rounded-lg border border-slate-600">
+                <div>
+                   <div class="font-bold text-slate-200">${p.name} ${statusBadge}</div>
+                   <div class="text-xs text-emerald-400 font-mono mt-1">+${roundScore} this round</div>
+                </div>
+                <div class="text-xl font-bold font-mono text-white">
+                   Total: ${newTotal}
+                </div>
+             </div>
+          `;
+       });
+       
+       document.getElementById('tally-screen').classList.remove('hidden');
+    }
+  </script>
+</body>
+</html>
