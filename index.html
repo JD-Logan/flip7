@@ -129,12 +129,12 @@
       
       <div class="mt-4">
         <div class="flex justify-between items-end mb-2">
-          <p class="text-xs text-slate-400">Active Cards</p>
+          <p class="text-xs text-slate-400" id="middle-active-cards-label">Active Cards</p>
           <span id="forced-draw-indicator" class="hidden text-xs font-bold text-rose-100 bg-rose-600 px-2 py-1 rounded shadow animate-pulse">3 FORCED DRAWS LEFT</span>
         </div>
         
         <div id="banked-cards-container" class="mb-2 hidden bg-slate-900/60 p-2 rounded-lg border border-slate-700">
-          <p class="text-[10px] text-amber-400 font-bold uppercase mb-1 tracking-wider">Banked Actions</p>
+          <p class="text-[10px] text-amber-400 font-bold uppercase mb-1 tracking-wider">Banked Actions (Resolves if survived)</p>
           <div id="banked-cards" class="flex flex-wrap gap-2"></div>
         </div>
         
@@ -249,13 +249,42 @@
     
     let gameSettings = { autoDraw: true, manualEntry: true, showRisk: true, showCount: true };
     
-    let myPlayerId = 'usr_' + Math.random().toString(36).substr(2, 9);
-    let myName = "Player";
+    // --- IDENTITY PERSISTENCE (Fixes iPad Refresh Bug) ---
+    let myPlayerId = localStorage.getItem('flip7_playerId');
+    if (!myPlayerId) {
+        myPlayerId = 'usr_' + Math.random().toString(36).substr(2, 9);
+        localStorage.setItem('flip7_playerId', myPlayerId);
+    }
+    
+    let myName = localStorage.getItem('flip7_playerName') || "Player";
     let isHost = false;
-    let currentRoomCode = "";
+    let currentRoomCode = localStorage.getItem('flip7_roomCode') || "";
     let lastActionId = 0;
     let previousStateBackup = null; 
 
+    // Auto-fill fields on load
+    window.addEventListener('DOMContentLoaded', () => {
+        if(myName !== "Player") document.getElementById('my-name-input').value = myName;
+        if(currentRoomCode) document.getElementById('join-code-input').value = currentRoomCode;
+        
+        // Invisible Auto-Reconnect if page was reloaded mid-game
+        if(currentRoomCode) {
+            get(ref(db, `rooms/${currentRoomCode}`)).then(snapshot => {
+                if (snapshot.exists()) {
+                    let data = snapshot.val();
+                    let currentPlayers = ensureArray(data.gameState?.players);
+                    let existingMe = currentPlayers.find(p => p.id === myPlayerId);
+                    if (existingMe && data.status !== 'lobby') {
+                        myName = existingMe.name;
+                        document.getElementById('home-screen').classList.add('hidden');
+                        listenToRoom(); // Drops them right back in!
+                    }
+                }
+            });
+        }
+    });
+
+    // Bind exports
     window.hostGame = hostGame;
     window.joinGame = joinGame;
     window.startGame = startGame;
@@ -377,6 +406,9 @@
       currentRoomCode = Math.random().toString(36).substr(2, 4).toUpperCase();
       isHost = true;
       
+      localStorage.setItem('flip7_playerName', myName);
+      localStorage.setItem('flip7_roomCode', currentRoomCode);
+      
       let auto = document.getElementById('set-auto').checked;
       let manual = document.getElementById('set-manual').checked;
       if(!auto && !manual) return alert("You must enable at least one draw method!");
@@ -419,6 +451,9 @@
       
       if(code.length !== 4) return alert("Enter a valid 4-letter code");
 
+      localStorage.setItem('flip7_playerName', myName);
+      localStorage.setItem('flip7_roomCode', code);
+
       get(ref(db, `rooms/${code}`)).then(snapshot => {
         if (snapshot.exists()) {
           let data = snapshot.val();
@@ -428,9 +463,13 @@
           isHost = false;
           
           let currentPlayers = ensureArray(data.gameState.players);
-          currentPlayers.push({ id: myPlayerId, name: myName, hand: [], bankedActions: [], secondChance: false, roundStatus: 'active', totalScore: 0 });
           
-          update(ref(db, `rooms/${code}/gameState`), { players: currentPlayers });
+          // Prevents duplicate ghost identities if they double-clicked or refreshed
+          let existingMe = currentPlayers.find(p => p.id === myPlayerId);
+          if (!existingMe) {
+              currentPlayers.push({ id: myPlayerId, name: myName, hand: [], bankedActions: [], secondChance: false, roundStatus: 'active', totalScore: 0 });
+              update(ref(db, `rooms/${code}/gameState`), { players: currentPlayers });
+          }
 
           document.getElementById('home-screen').classList.add('hidden');
           document.getElementById('lobby-screen').classList.remove('hidden');
@@ -857,6 +896,26 @@
       broadcastAction("Discards shuffled back into the deck!");
     }
 
+    function openTargetModal(title, desc, targetOptions, callback) {
+      document.getElementById('target-modal-title').innerText = title;
+      document.getElementById('target-modal-desc').innerText = desc;
+      const list = document.getElementById('target-list');
+      list.innerHTML = '';
+      
+      targetOptions.forEach(target => {
+        const btn = document.createElement('button');
+        btn.className = "w-full bg-slate-700 hover:bg-indigo-600 text-white font-bold py-4 rounded-xl transition text-lg";
+        btn.innerText = target.name;
+        btn.onclick = () => {
+          document.getElementById('target-modal').classList.add('hidden');
+          let globalIdx = players.findIndex(p => p.id === target.id);
+          callback(globalIdx);
+        };
+        list.appendChild(btn);
+      });
+      document.getElementById('target-modal').classList.remove('hidden');
+    }
+
     function updateUI() {
       try {
           renderCardModalGrids(); 
@@ -866,7 +925,6 @@
           
           let amIActivePlayer = isMyTurn();
 
-          // 1. Top Horizon Status Bar (Now deeply lists everyone's hands and scores clearly)
           const statusBar = document.getElementById('player-status-bar');
           statusBar.innerHTML = players.map((p, i) => {
             let opacity = p.roundStatus === 'active' ? 'opacity-100' : 'opacity-60';
@@ -895,6 +953,7 @@
 
           document.getElementById('current-player-name').innerText = amIActivePlayer ? "Your" : player.name;
           document.getElementById('turn-suffix').innerText = amIActivePlayer ? " Turn" : "'s Turn";
+          document.getElementById('middle-active-cards-label').innerText = amIActivePlayer ? "Your Active Cards" : `${player.name}'s Active Cards`;
           
           const bankedContainer = document.getElementById('banked-cards-container');
           const bankedCards = document.getElementById('banked-cards');
@@ -960,7 +1019,7 @@
              }
           }
 
-          // DYNAMIC CONTROLS LAYOUT (Cleaned and De-duplicated)
+          // DYNAMIC CONTROLS LAYOUT 
           const stayBtn = document.getElementById('stay-btn');
           const drawBtn = document.getElementById('draw-btn');
           const randomDrawBtn = document.getElementById('random-draw-btn');
@@ -971,7 +1030,6 @@
 
           stayBtn.disabled = !amIActivePlayer;
 
-          // Reset baseline classes before applying logic
           stayBtn.className = "bg-slate-700 hover:bg-slate-600 py-3 rounded-xl font-bold transition text-slate-200 shadow disabled:opacity-30 disabled:cursor-not-allowed";
           drawBtn.className = "py-3 rounded-xl font-bold text-white shadow-lg transition disabled:opacity-30 disabled:cursor-not-allowed";
           randomDrawBtn.className = "py-4 rounded-xl font-bold text-white shadow-lg transition text-lg flex items-center justify-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed";
