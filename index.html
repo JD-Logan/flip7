@@ -129,6 +129,7 @@
       
       <div class="mt-4">
         <div class="flex justify-between items-end mb-2">
+          <!-- CRITICAL FIX: The ID was missing here in the HTML! -->
           <p class="text-xs text-slate-400" id="middle-active-cards-label">Active Cards</p>
           <span id="forced-draw-indicator" class="hidden text-xs font-bold text-rose-100 bg-rose-600 px-2 py-1 rounded shadow animate-pulse">3 FORCED DRAWS LEFT</span>
         </div>
@@ -249,7 +250,7 @@
     
     let gameSettings = { autoDraw: true, manualEntry: true, showRisk: true, showCount: true };
     
-    // --- IDENTITY PERSISTENCE (Fixes iPad Refresh Bug) ---
+    // --- IDENTITY PERSISTENCE (Fixes iOS/Safari Background Refresh) ---
     let myPlayerId = localStorage.getItem('flip7_playerId');
     if (!myPlayerId) {
         myPlayerId = 'usr_' + Math.random().toString(36).substr(2, 9);
@@ -464,7 +465,6 @@
           
           let currentPlayers = ensureArray(data.gameState.players);
           
-          // Prevents duplicate ghost identities if they double-clicked or refreshed
           let existingMe = currentPlayers.find(p => p.id === myPlayerId);
           if (!existingMe) {
               currentPlayers.push({ id: myPlayerId, name: myName, hand: [], bankedActions: [], secondChance: false, roundStatus: 'active', totalScore: 0 });
@@ -708,10 +708,10 @@
         }
       } 
       else if (type === 'number') {
-        let activeNumbers = new Set(player.hand.filter(c => c && c.type === 'number').map(c => c.value));
+        let activeNumbers = new Set(player.hand.filter(c => c && c.type === 'number').map(c => String(c.value)));
         deck.numbers[value]--;
         
-        if (activeNumbers.has(value)) {
+        if (activeNumbers.has(String(value))) {
           if (player.secondChance) {
             player.secondChance = false;
             resolveDrawStep(`🛡️ ${drawMsg}. BUST PREVENTED by Second Chance!`); 
@@ -886,36 +886,6 @@
        });
     }
 
-    function reshuffleDeckButton() {
-      backupStateBeforeAction();
-      deck = deepClone(DECK_TEMPLATE);
-      players.forEach(p => {
-        p.hand.forEach(card => deck[card.type + 's'][card.value]--);
-        if (p.secondChance) deck.actions['SecondChance']--;
-      });
-      broadcastAction("Discards shuffled back into the deck!");
-    }
-
-    function openTargetModal(title, desc, targetOptions, callback) {
-      document.getElementById('target-modal-title').innerText = title;
-      document.getElementById('target-modal-desc').innerText = desc;
-      const list = document.getElementById('target-list');
-      list.innerHTML = '';
-      
-      targetOptions.forEach(target => {
-        const btn = document.createElement('button');
-        btn.className = "w-full bg-slate-700 hover:bg-indigo-600 text-white font-bold py-4 rounded-xl transition text-lg";
-        btn.innerText = target.name;
-        btn.onclick = () => {
-          document.getElementById('target-modal').classList.add('hidden');
-          let globalIdx = players.findIndex(p => p.id === target.id);
-          callback(globalIdx);
-        };
-        list.appendChild(btn);
-      });
-      document.getElementById('target-modal').classList.remove('hidden');
-    }
-
     function updateUI() {
       try {
           renderCardModalGrids(); 
@@ -966,7 +936,6 @@
           }
 
           const container = document.getElementById('active-cards');
-          document.getElementById('tap-undo-text').style.display = 'none';
 
           if (player.hand.length === 0) {
             container.innerHTML = '<span class="text-slate-500 text-sm italic py-2 px-1">Table is empty</span>';
@@ -1103,15 +1072,14 @@
           // DYNAMIC RULES (MATH & PROBABILITIES)
           let totalCards = 0;
           let bustCardsRemaining = 0;
-          let validCardCount = player.hand.filter(c => c).length;
-          const activeNumbers = new Set(player.hand.filter(c => c && c.type === 'number').map(c => c.value));
+          const activeNumbers = new Set(player.hand.filter(c => c && c.type === 'number').map(c => String(c.value)));
 
           Object.entries(deck.numbers).forEach(([val, count]) => {
-            totalCards += count;
-            if (activeNumbers.has(val)) bustCardsRemaining += count;
+            totalCards += parseInt(count) || 0;
+            if (activeNumbers.has(String(val))) bustCardsRemaining += parseInt(count) || 0;
           });
-          Object.values(deck.modifiers).forEach(count => totalCards += count);
-          Object.values(deck.actions).forEach(count => totalCards += count);
+          Object.values(deck.modifiers).forEach(count => totalCards += parseInt(count) || 0);
+          Object.values(deck.actions).forEach(count => totalCards += parseInt(count) || 0);
 
           let probBust = player.secondChance ? 0 : (totalCards > 0 ? (bustCardsRemaining / totalCards) : 0);
           let currentScore = calculatePlayerScore(player);
@@ -1153,6 +1121,7 @@
               badge.classList.add('hidden');
           }
           
+          let validCardCount = player.hand.filter(c => c).length;
           let flip7Text = validCardCount >= 7 ? ' <span class="text-xs text-emerald-300 animate-pulse ml-1">(+15 FLIP 7!)</span>' : '';
           document.getElementById('expected-value').innerHTML = currentScore + flip7Text;
 
@@ -1170,10 +1139,10 @@
        player.hand.forEach(c => {
          if (!c) return;
          validCards++;
-         if (c.type === 'number') score += parseInt(c.value);
+         if (c.type === 'number') score += parseInt(c.value) || 0;
          if (c.type === 'modifier') {
-           if (c.value === 'x2') multiplier *= 2;
-           else score += parseInt(c.value.replace('+',''));
+           if (String(c.value) === 'x2') multiplier *= 2;
+           else score += parseInt(String(c.value).replace('+','')) || 0;
          }
        });
        
