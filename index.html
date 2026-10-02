@@ -85,6 +85,9 @@
       </button>
       <p id="waiting-host-msg" class="text-sm text-amber-400 font-bold text-center animate-pulse">Waiting for host to start...</p>
     </div>
+    
+    <!-- Leave Button for Lobby -->
+    <button onclick="leaveRoom()" class="mt-8 text-rose-400 font-bold underline underline-offset-4 opacity-80 hover:opacity-100">Leave Room</button>
   </div>
 
   <!-- SCREEN 3: MAIN GAME UI -->
@@ -100,6 +103,9 @@
         </button>
         <button onclick="reshuffleDeckButton()" class="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-2 rounded-lg text-xs font-bold transition shadow">
           Shuffle
+        </button>
+        <button onclick="leaveRoom()" class="bg-rose-900 hover:bg-rose-800 text-rose-200 px-3 py-2 rounded-lg text-xs font-bold transition shadow">
+          Leave
         </button>
       </div>
     </header>
@@ -129,7 +135,6 @@
       
       <div class="mt-4">
         <div class="flex justify-between items-end mb-2">
-          <!-- CRITICAL FIX: The ID was missing here in the HTML! -->
           <p class="text-xs text-slate-400" id="middle-active-cards-label">Active Cards</p>
           <span id="forced-draw-indicator" class="hidden text-xs font-bold text-rose-100 bg-rose-600 px-2 py-1 rounded shadow animate-pulse">3 FORCED DRAWS LEFT</span>
         </div>
@@ -215,6 +220,9 @@
       <button onclick="newGame()" class="w-full bg-rose-700 hover:bg-rose-600 py-3 rounded-xl font-bold text-white shadow shadow-rose-900/50 transition">
         End Game & Start Fresh
       </button>
+      <button onclick="leaveRoom()" class="w-full bg-slate-700 hover:bg-slate-600 py-3 rounded-xl font-bold text-slate-300 shadow shadow-slate-900/50 transition mt-4">
+        Leave Room & Return Home
+      </button>
     </div>
   </div>
 
@@ -258,7 +266,7 @@
     }
     
     let myName = localStorage.getItem('flip7_playerName') || "Player";
-    let isHost = false;
+    let isHost = localStorage.getItem('flip7_isHost') === 'true'; // RESTORES HOST PRIVILEGES
     let currentRoomCode = localStorage.getItem('flip7_roomCode') || "";
     let lastActionId = 0;
     let previousStateBackup = null; 
@@ -278,7 +286,7 @@
                     if (existingMe && data.status !== 'lobby') {
                         myName = existingMe.name;
                         document.getElementById('home-screen').classList.add('hidden');
-                        listenToRoom(); // Drops them right back in!
+                        listenToRoom(); 
                     }
                 }
             });
@@ -298,6 +306,7 @@
     window.newGame = newGame;
     window.reshuffleDeckButton = reshuffleDeckButton;
     window.triggerConfetti = triggerConfetti;
+    window.leaveRoom = leaveRoom;
 
     function deepClone(obj) {
         return JSON.parse(JSON.stringify(obj));
@@ -349,6 +358,13 @@
                 div.style.opacity = 0;
             }, 50);
         }
+    }
+
+    // --- LEAVE ROOM FUNCTION ---
+    function leaveRoom() {
+        localStorage.removeItem('flip7_roomCode');
+        localStorage.removeItem('flip7_isHost');
+        location.reload(); 
     }
 
     function renderCardModalGrids() {
@@ -409,6 +425,7 @@
       
       localStorage.setItem('flip7_playerName', myName);
       localStorage.setItem('flip7_roomCode', currentRoomCode);
+      localStorage.setItem('flip7_isHost', 'true');
       
       let auto = document.getElementById('set-auto').checked;
       let manual = document.getElementById('set-manual').checked;
@@ -454,6 +471,7 @@
 
       localStorage.setItem('flip7_playerName', myName);
       localStorage.setItem('flip7_roomCode', code);
+      localStorage.setItem('flip7_isHost', 'false');
 
       get(ref(db, `rooms/${code}`)).then(snapshot => {
         if (snapshot.exists()) {
@@ -529,6 +547,10 @@
                       ${players.length > 0 && p.id === players[0].id ? '<span class="text-xs text-amber-400 uppercase tracking-widest mt-1">Host</span>' : ''}
                     </div>
                   `).join('');
+              }
+              if (isHost) {
+                  document.getElementById('start-game-btn').classList.remove('hidden');
+                  document.getElementById('waiting-host-msg').classList.add('hidden');
               }
             } else if (data.status === 'playing') {
               document.getElementById('lobby-screen').classList.add('hidden');
@@ -886,6 +908,36 @@
        });
     }
 
+    function reshuffleDeckButton() {
+      backupStateBeforeAction();
+      deck = deepClone(DECK_TEMPLATE);
+      players.forEach(p => {
+        p.hand.forEach(card => deck[card.type + 's'][card.value]--);
+        if (p.secondChance) deck.actions['SecondChance']--;
+      });
+      broadcastAction("Discards shuffled back into the deck!");
+    }
+
+    function openTargetModal(title, desc, targetOptions, callback) {
+      document.getElementById('target-modal-title').innerText = title;
+      document.getElementById('target-modal-desc').innerText = desc;
+      const list = document.getElementById('target-list');
+      list.innerHTML = '';
+      
+      targetOptions.forEach(target => {
+        const btn = document.createElement('button');
+        btn.className = "w-full bg-slate-700 hover:bg-indigo-600 text-white font-bold py-4 rounded-xl transition text-lg";
+        btn.innerText = target.name;
+        btn.onclick = () => {
+          document.getElementById('target-modal').classList.add('hidden');
+          let globalIdx = players.findIndex(p => p.id === target.id);
+          callback(globalIdx);
+        };
+        list.appendChild(btn);
+      });
+      document.getElementById('target-modal').classList.remove('hidden');
+    }
+
     function updateUI() {
       try {
           renderCardModalGrids(); 
@@ -1207,7 +1259,12 @@
            title.classList.replace('text-amber-400', 'text-emerald-400');
            subtitle.innerText = "Score Summary";
            celebrationText.classList.add('hidden');
-           nextRoundBtn.classList.remove('hidden');
+           
+           if(isHost) {
+               nextRoundBtn.classList.remove('hidden');
+           } else {
+               nextRoundBtn.classList.add('hidden');
+           }
        }
        
        document.getElementById('tally-screen').classList.remove('hidden');
