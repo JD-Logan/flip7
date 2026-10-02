@@ -13,6 +13,9 @@
 <body class="bg-slate-900 text-slate-100 p-4 font-sans antialiased max-w-md mx-auto relative min-h-screen flex flex-col">
 
   <div id="toast-container" class="fixed top-4 left-1/2 -translate-x-1/2 z-[100] flex flex-col gap-2 pointer-events-none w-[90%] max-w-sm"></div>
+  
+  <!-- CONFETTI OVERLAY -->
+  <div id="confetti-container" class="fixed inset-0 pointer-events-none z-[100] hidden overflow-hidden"></div>
 
   <!-- SCREEN 1: HOME (Host / Join) -->
   <div id="home-screen" class="absolute inset-0 z-50 bg-slate-900 flex flex-col items-center justify-center p-6 overflow-y-auto">
@@ -101,7 +104,8 @@
       </div>
     </header>
 
-    <div class="flex gap-2 overflow-x-auto pb-2 mb-4 no-scrollbar" id="player-status-bar"></div>
+    <!-- Global Players Grid -->
+    <div class="flex flex-wrap gap-2 pb-2 mb-4" id="player-status-bar"></div>
 
     <!-- Active Player Focus -->
     <div class="bg-slate-800 p-4 rounded-xl mb-4 shadow-lg border border-slate-700 transition-all duration-300 relative" id="active-player-card">
@@ -191,15 +195,17 @@
 
   <!-- ROUND TALLY SCREEN -->
   <div id="tally-screen" class="hidden absolute inset-0 z-[80] bg-slate-900 flex flex-col items-center justify-center p-6 overflow-y-auto">
-    <h1 class="text-4xl font-bold text-emerald-400 mb-2">Round Over!</h1>
-    <p class="text-slate-400 mb-6">Score Summary</p>
+    <h1 class="text-5xl font-black text-emerald-400 mb-2" id="tally-title">Round Over!</h1>
+    <p class="text-slate-400 mb-6 font-bold tracking-widest uppercase" id="tally-subtitle">Score Summary</p>
+    
+    <div id="tally-celebration-text" class="hidden text-3xl font-black text-white mb-6 text-center animate-bounce bg-amber-500 px-6 py-3 rounded-2xl shadow-[0_0_30px_rgba(245,158,11,0.5)]"></div>
     
     <div class="bg-slate-800 p-4 rounded-2xl w-full max-w-sm border border-slate-700 shadow-2xl mb-6">
       <div id="tally-list" class="flex flex-col gap-3"></div>
     </div>
     
     <div class="flex flex-col gap-3 w-full max-w-sm">
-      <button onclick="startNextRound()" class="w-full bg-emerald-600 hover:bg-emerald-500 py-4 rounded-xl font-bold text-white shadow-lg shadow-emerald-900/50 transition text-lg">
+      <button id="tally-next-round-btn" onclick="startNextRound()" class="w-full bg-emerald-600 hover:bg-emerald-500 py-4 rounded-xl font-bold text-white shadow-lg shadow-emerald-900/50 transition text-lg">
         Start Next Round
       </button>
       <button onclick="undoAction()" class="w-full bg-amber-600 hover:bg-amber-500 py-3 rounded-xl font-bold text-white shadow shadow-amber-900/50 transition">
@@ -261,6 +267,7 @@
     window.startNextRound = startNextRound;
     window.newGame = newGame;
     window.reshuffleDeckButton = reshuffleDeckButton;
+    window.triggerConfetti = triggerConfetti;
 
     function deepClone(obj) {
         return JSON.parse(JSON.stringify(obj));
@@ -277,7 +284,7 @@
       const toast = document.createElement('div');
       let bgClass = 'bg-slate-800 border-slate-600';
       if (message.includes('BUST!') || message.includes('None') || message.includes('No one else') || message.includes('Error') || message.includes('empty')) bgClass = 'bg-rose-700 border-rose-500';
-      if (message.includes('PREVENTED') || message.includes('survived') || message.includes('Undo')) bgClass = 'bg-emerald-700 border-emerald-500';
+      if (message.includes('PREVENTED') || message.includes('survived') || message.includes('Undo') || message.includes('FLIP 7')) bgClass = 'bg-emerald-700 border-emerald-500';
       if (message.includes('Action') || message.includes('Second Chance') || message.includes('FROZEN') || message.includes('yourself') || message.includes('banked')) bgClass = 'bg-indigo-700 border-indigo-500';
       if (message.includes('🎲')) bgClass = 'bg-cyan-700 border-cyan-500'; 
 
@@ -292,12 +299,32 @@
       }, 3000);
     }
 
-    // --- SMART CARD MODAL RENDERER ---
+    function triggerConfetti() {
+        const container = document.getElementById('confetti-container');
+        container.classList.remove('hidden');
+        container.innerHTML = '';
+        const emojis = ['🎉', '🏆', '🎊', '✨', '🔥', '💸', '💎'];
+        for(let i=0; i<60; i++) {
+            let div = document.createElement('div');
+            div.innerText = emojis[Math.floor(Math.random() * emojis.length)];
+            div.style.position = 'absolute';
+            div.style.left = Math.random() * 100 + 'vw';
+            div.style.top = '-10vh';
+            div.style.fontSize = (Math.random() * 20 + 20) + 'px';
+            div.style.transition = 'transform ' + (Math.random() * 2 + 2) + 's linear, opacity ' + (Math.random() * 2 + 2) + 's linear';
+            container.appendChild(div);
+
+            setTimeout(() => {
+                div.style.transform = `translateY(120vh) rotate(${Math.random() * 720}deg)`;
+                div.style.opacity = 0;
+            }, 50);
+        }
+    }
+
     function renderCardModalGrids() {
         let amIActivePlayer = isMyTurn();
         let canDraw = gameSettings.manualEntry && amIActivePlayer;
 
-        // Change Title based on mode
         document.getElementById('card-modal-title').innerText = canDraw ? "Select Drawn Card" : "Deck Remaining Viewer";
 
         const renderButton = (key, count, type, bgBase, hoverClass, textColor) => {
@@ -467,6 +494,7 @@
             } else if (data.status === 'playing') {
               document.getElementById('lobby-screen').classList.add('hidden');
               document.getElementById('tally-screen').classList.add('hidden');
+              document.getElementById('confetti-container').classList.add('hidden');
               document.getElementById('game-ui').classList.remove('hidden');
               updateUI(); 
             } else if (data.status === 'tally') {
@@ -496,7 +524,6 @@
       });
     }
 
-    // --- SHARED STATE SYNC ---
     function broadcastAction(msg) {
       update(ref(db, `rooms/${currentRoomCode}/gameState`), {
         settings: gameSettings,
@@ -531,6 +558,7 @@
       
       document.getElementById('card-modal').classList.add('hidden');
       document.getElementById('target-modal').classList.add('hidden');
+      document.getElementById('confetti-container').classList.add('hidden');
       
       if(!document.getElementById('tally-screen').classList.contains('hidden')){
          update(ref(db, `rooms/${currentRoomCode}`), { status: 'playing' });
@@ -568,9 +596,7 @@
     function handleDraw(value, type, isRandom = false) {
       if(!isMyTurn()) return;
       if(deck[type + 's'][value] <= 0) {
-          if(!gameSettings.showCount) {
-             showToast(`Cannot draw ${value} — that card is empty!`);
-          }
+          if(!gameSettings.showCount) showToast(`Cannot draw ${value} — that card is empty!`);
           return; 
       }
       
@@ -581,64 +607,65 @@
       let drawMsg = isRandom ? `🎲 ${player.name} auto-drew a ${value}` : `${player.name} drew a ${value}`;
 
       if (type === 'action') {
-        if (value === 'SecondChance') {
-          deck.actions['SecondChance']--;
-          if (!player.secondChance) {
-            player.secondChance = true;
-            resolveDrawStep(`${drawMsg} & kept the Second Chance!`); 
-          } else {
-            let eligible = players.filter(p => !p.secondChance && p.roundStatus === 'active');
-            if (eligible.length === 0) {
-              resolveDrawStep(`${drawMsg} but everyone has one. Discarded!`);
-            } else {
-              openTargetModal("Pass Second Chance", "You already have one. Who gets this?", eligible, (targetIndex) => {
-                players[targetIndex].secondChance = true;
-                resolveDrawStep(`${player.name} gave a Second Chance to ${players[targetIndex].name}!`);
-              });
-            }
-          }
-        } 
-        else if (value === 'Flip3') {
-          deck.actions['Flip3']--;
-          if (forcedDrawsLeft > 0) {
-              player.bankedActions.push('Flip3');
-              resolveDrawStep(`${drawMsg} & banked it!`);
-              return;
-          }
-
-          let activePlayers = players.filter(p => p.roundStatus === 'active');
-          if (activePlayers.length === 1) {
-             turnStack.push({ returnIndex: currentPlayerIndex, previousForcedDraws: forcedDrawsLeft });
-             forcedDrawsLeft = 3;
-             broadcastAction(`${drawMsg}. No one else active, hijacked themselves!`);
-          } else {
-             openTargetModal("Flip Three!", "Who must draw 3 cards? (You can choose yourself)", activePlayers, (targetIndex) => {
-               turnStack.push({ returnIndex: currentPlayerIndex, previousForcedDraws: forcedDrawsLeft });
-               currentPlayerIndex = targetIndex;
-               forcedDrawsLeft = 3;
-               broadcastAction(`${drawMsg} & hijacked ${players[targetIndex].name}!`);
-             });
-          }
+        deck.actions[value]--;
+        
+        if (forcedDrawsLeft > 0) {
+           if (value === 'SecondChance') {
+               if (!player.secondChance) {
+                   player.secondChance = true; 
+                   resolveDrawStep(`${drawMsg} & kept the Second Chance!`);
+               } else {
+                   player.bankedActions.push('PassSecondChance'); 
+                   resolveDrawStep(`${drawMsg} & banked the Second Chance pass!`);
+               }
+           } else {
+               player.bankedActions.push(value); 
+               resolveDrawStep(`${drawMsg} & banked it!`);
+           }
+           return;
         }
-        else if (value === 'Freeze') {
-          deck.actions['Freeze']--;
-          if (forcedDrawsLeft > 0) {
-              player.bankedActions.push('Freeze');
-              resolveDrawStep(`${drawMsg} & banked it!`);
-              return;
-          }
-
-          let activeOpponents = players.filter(p => p.id !== player.id && p.roundStatus === 'active');
-          if (activeOpponents.length === 0) {
-              player.roundStatus = 'frozen';
-              resolveDrawStep(`${drawMsg}. No one else active, froze themselves!`);
-          } else {
-              let activePlayers = players.filter(p => p.roundStatus === 'active');
-              openTargetModal("Freeze!", "Choose an active player to freeze.", activePlayers, (targetIndex) => {
-                players[targetIndex].roundStatus = 'frozen';
-                resolveDrawStep(`${drawMsg} & froze ${players[targetIndex].name}!`);
-              });
-          }
+        
+        if (value === 'SecondChance') {
+            if (!player.secondChance) {
+                player.secondChance = true;
+                resolveDrawStep(`${drawMsg} & kept the Second Chance!`);
+            } else {
+                let eligible = players.filter(p => !p.secondChance && p.roundStatus === 'active');
+                if (eligible.length === 0) {
+                    resolveDrawStep(`${drawMsg} but everyone has one. Discarded!`);
+                } else {
+                    openTargetModal("Pass Second Chance", "You already have one. Who gets this?", eligible, (targetIndex) => {
+                        players[targetIndex].secondChance = true;
+                        resolveDrawStep(`${player.name} gave a Second Chance to ${players[targetIndex].name}!`);
+                    });
+                }
+            }
+        } else if (value === 'Flip3') {
+            let activePlayers = players.filter(p => p.roundStatus === 'active');
+            if (activePlayers.length === 1) {
+                turnStack.push({ returnIndex: currentPlayerIndex, previousForcedDraws: forcedDrawsLeft });
+                forcedDrawsLeft = 3;
+                broadcastAction(`${drawMsg}. No one else active, hijacked themselves!`);
+            } else {
+                openTargetModal("Flip Three!", "Who must draw 3 cards? (You can choose yourself)", activePlayers, (targetIndex) => {
+                    turnStack.push({ returnIndex: currentPlayerIndex, previousForcedDraws: forcedDrawsLeft });
+                    currentPlayerIndex = targetIndex;
+                    forcedDrawsLeft = 3;
+                    broadcastAction(`${drawMsg} & hijacked ${players[targetIndex].name}!`);
+                });
+            }
+        } else if (value === 'Freeze') {
+            let activeOpponents = players.filter(p => p.id !== player.id && p.roundStatus === 'active');
+            if (activeOpponents.length === 0) {
+                player.roundStatus = 'frozen';
+                resolveDrawStep(`${drawMsg}. No one else active, froze themselves!`);
+            } else {
+                let activePlayers = players.filter(p => p.roundStatus === 'active');
+                openTargetModal("Freeze!", "Choose an active player to freeze.", activePlayers, (targetIndex) => {
+                    players[targetIndex].roundStatus = 'frozen';
+                    resolveDrawStep(`${drawMsg} & froze ${players[targetIndex].name}!`);
+                });
+            }
         }
       } 
       else if (type === 'number') {
@@ -717,6 +744,16 @@
               openTargetModal("Banked Freeze!", "Choose an active player to freeze.", activePlayers, (targetIndex) => {
                   players[targetIndex].roundStatus = 'frozen';
                   processBankedActions(`Banked Freeze froze ${players[targetIndex].name}!`);
+              });
+          }
+      } else if (action === 'PassSecondChance') {
+          let eligible = players.filter(p => !p.secondChance && p.roundStatus === 'active');
+          if (eligible.length === 0) {
+              processBankedActions(`${precedingMsg} Banked Second Chance discarded.`);
+          } else {
+              openTargetModal("Banked Second Chance", "You already have one. Who gets this?", eligible, (targetIndex) => {
+                  players[targetIndex].secondChance = true;
+                  processBankedActions(`${precedingMsg} Gave Banked Second Chance to ${players[targetIndex].name}!`);
               });
           }
       }
@@ -820,26 +857,6 @@
       broadcastAction("Discards shuffled back into the deck!");
     }
 
-    function openTargetModal(title, desc, targetOptions, callback) {
-      document.getElementById('target-modal-title').innerText = title;
-      document.getElementById('target-modal-desc').innerText = desc;
-      const list = document.getElementById('target-list');
-      list.innerHTML = '';
-      
-      targetOptions.forEach(target => {
-        const btn = document.createElement('button');
-        btn.className = "w-full bg-slate-700 hover:bg-indigo-600 text-white font-bold py-4 rounded-xl transition text-lg";
-        btn.innerText = target.name;
-        btn.onclick = () => {
-          document.getElementById('target-modal').classList.add('hidden');
-          let globalIdx = players.findIndex(p => p.id === target.id);
-          callback(globalIdx);
-        };
-        list.appendChild(btn);
-      });
-      document.getElementById('target-modal').classList.remove('hidden');
-    }
-
     function updateUI() {
       try {
           renderCardModalGrids(); 
@@ -849,22 +866,30 @@
           
           let amIActivePlayer = isMyTurn();
 
+          // 1. Top Horizon Status Bar (Now deeply lists everyone's hands and scores clearly)
           const statusBar = document.getElementById('player-status-bar');
           statusBar.innerHTML = players.map((p, i) => {
-            let opacity = p.roundStatus === 'active' ? 'opacity-100' : 'opacity-40';
-            let bg = i === currentPlayerIndex ? 'bg-emerald-900/60 border-emerald-500 text-emerald-100 shadow-md scale-105 transition-transform' : 'bg-slate-800 border-slate-700 text-slate-400';
+            let opacity = p.roundStatus === 'active' ? 'opacity-100' : 'opacity-60';
+            let bg = i === currentPlayerIndex ? 'bg-emerald-900/60 border-emerald-500 text-emerald-100 shadow-md' : 'bg-slate-800 border-slate-700 text-slate-300';
             
-            let statusText = `${p.hand.length} CARDS`;
+            let statusText = `${p.hand.filter(c=>c).length} CARDS`;
             if (p.roundStatus === 'stayed') statusText = 'STAYED';
             if (p.roundStatus === 'busted') statusText = 'BUSTED';
             if (p.roundStatus === 'frozen') statusText = 'FROZEN';
-            let meIndicator = p.id === myPlayerId ? '*(You)*' : '';
+
+            let handHtml = p.hand.length === 0 ? '<span class="text-[10px] text-slate-500 italic mt-1">Empty</span>' : `<div class="flex flex-wrap gap-1 mt-1.5">${p.hand.filter(c=>c).map(c => `<span class="inline-flex items-center justify-center w-5 h-5 rounded text-[10px] font-bold shadow-sm ${c.type==='number' ? 'bg-slate-200 text-slate-900' : 'bg-indigo-500 text-white'}">${c.value}</span>`).join('')}</div>`;
 
             return `
-            <div class="flex-shrink-0 px-4 py-2 rounded-xl border ${bg} ${opacity}">
-              <span class="font-bold text-sm whitespace-nowrap">${p.name} <span class="text-[10px] font-normal text-slate-300">${meIndicator}</span></span>
-              ${p.secondChance ? `<span class="ml-1 text-[10px] bg-amber-500 text-amber-950 px-1.5 py-0.5 rounded-full font-bold">SC</span>` : ''}
-              <div class="text-[10px] mt-1 tracking-wide font-bold">${statusText}</div>
+            <div class="flex-grow w-[45%] sm:w-[30%] px-3 py-2 rounded-xl border ${bg} ${opacity} flex flex-col justify-start transition-all">
+              <div class="flex justify-between items-start mb-1 border-b border-slate-700/50 pb-1">
+                <span class="font-bold text-sm whitespace-nowrap truncate pr-1">${p.name} ${p.id === myPlayerId ? '<span class="text-[9px] text-slate-400 font-normal">(You)</span>' : ''}</span>
+                <span class="text-[10px] font-bold text-emerald-400 mt-0.5">Pts: ${p.totalScore}</span>
+              </div>
+              <div class="flex items-center gap-1 mb-1">
+                <span class="text-[9px] tracking-wide font-bold bg-black/30 px-1.5 py-0.5 rounded uppercase">${statusText}</span>
+                ${p.secondChance ? `<span class="text-[8px] bg-amber-500 text-amber-950 px-1 py-0.5 rounded font-bold">SC</span>` : ''}
+              </div>
+              ${handHtml}
             </div>
           `}).join('');
 
@@ -882,19 +907,23 @@
           }
 
           const container = document.getElementById('active-cards');
+          document.getElementById('tap-undo-text').style.display = 'none';
+
           if (player.hand.length === 0) {
             container.innerHTML = '<span class="text-slate-500 text-sm italic py-2 px-1">Table is empty</span>';
           } else {
             container.innerHTML = player.hand.map((c) => {
               if(!c) return '';
               let bgClass = c.type === 'number' ? 'bg-slate-200 text-slate-900' : 'bg-indigo-500 text-white';
-              return `<span class="inline-flex items-center justify-center min-w-[36px] h-9 px-3 rounded-lg text-sm font-bold shadow-sm ${bgClass}">${c.value}</span>`;
+              return `<span class="inline-flex items-center justify-center min-w-[36px] h-9 px-3 rounded-lg text-sm font-bold shadow-sm cursor-default ${bgClass}">${c.value}</span>`;
             }).join('');
           }
 
           let myPlayer = players.find(p => p.id === myPlayerId);
           if(myPlayer) {
-             document.getElementById('my-score').innerText = calculatePlayerScore(myPlayer);
+             let myValidCount = myPlayer.hand.filter(c=>c).length;
+             let myFlip7Text = myValidCount >= 7 ? ' <span class="text-emerald-300 animate-pulse text-[10px] ml-1">(+15)</span>' : '';
+             document.getElementById('my-score').innerHTML = calculatePlayerScore(myPlayer) + myFlip7Text;
              
              let statBadge = document.getElementById('my-status-badge');
              let frozenOverlay = document.getElementById('my-frozen-overlay');
@@ -931,7 +960,7 @@
              }
           }
 
-          // DYNAMIC CONTROLS LAYOUT
+          // DYNAMIC CONTROLS LAYOUT (Cleaned and De-duplicated)
           const stayBtn = document.getElementById('stay-btn');
           const drawBtn = document.getElementById('draw-btn');
           const randomDrawBtn = document.getElementById('random-draw-btn');
@@ -942,10 +971,14 @@
 
           stayBtn.disabled = !amIActivePlayer;
 
+          // Reset baseline classes before applying logic
+          stayBtn.className = "bg-slate-700 hover:bg-slate-600 py-3 rounded-xl font-bold transition text-slate-200 shadow disabled:opacity-30 disabled:cursor-not-allowed";
+          drawBtn.className = "py-3 rounded-xl font-bold text-white shadow-lg transition disabled:opacity-30 disabled:cursor-not-allowed";
+          randomDrawBtn.className = "py-4 rounded-xl font-bold text-white shadow-lg transition text-lg flex items-center justify-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed";
+
           if (manualOn || countOn) {
               drawBtn.classList.remove('hidden');
               drawBtn.disabled = false; 
-              
               if (manualOn && amIActivePlayer) {
                   drawBtn.innerText = forcedDrawsLeft > 0 ? `Manual (${forcedDrawsLeft})` : `+ Manual`;
               } else {
@@ -966,13 +999,6 @@
           } else {
               randomDrawBtn.classList.add('hidden');
           }
-
-          stayBtn.className = stayBtn.className.replace(/col-span-[1-2]/g, '').replace('sm:col-span-1', '').trim();
-          drawBtn.className = drawBtn.className.replace(/col-span-[1-2]/g, '').trim();
-          randomDrawBtn.className = randomDrawBtn.className.replace(/col-span-[1-2]/g, '').trim();
-
-          drawBtn.classList.remove('bg-emerald-600', 'hover:bg-emerald-500', 'shadow-emerald-900/50', 'bg-rose-600', 'hover:bg-rose-500', 'shadow-rose-900/50');
-          randomDrawBtn.classList.remove('bg-cyan-600', 'hover:bg-cyan-500', 'shadow-cyan-900/50', 'bg-rose-600', 'hover:bg-rose-500', 'shadow-rose-900/50');
 
           const forcedIndicator = document.getElementById('forced-draw-indicator');
           const activeCardFrame = document.getElementById('active-player-card');
@@ -1019,6 +1045,7 @@
           // DYNAMIC RULES (MATH & PROBABILITIES)
           let totalCards = 0;
           let bustCardsRemaining = 0;
+          let validCardCount = player.hand.filter(c => c).length;
           const activeNumbers = new Set(player.hand.filter(c => c && c.type === 'number').map(c => c.value));
 
           Object.entries(deck.numbers).forEach(([val, count]) => {
@@ -1068,7 +1095,8 @@
               badge.classList.add('hidden');
           }
           
-          document.getElementById('expected-value').innerText = currentScore;
+          let flip7Text = validCardCount >= 7 ? ' <span class="text-xs text-emerald-300 animate-pulse ml-1">(+15 FLIP 7!)</span>' : '';
+          document.getElementById('expected-value').innerHTML = currentScore + flip7Text;
 
       } catch (err) {
           console.error("UI Render Blocked:", err);
@@ -1079,35 +1107,53 @@
        if(!player || !player.hand) return 0;
        let score = 0;
        let multiplier = 1;
+       let validCards = 0;
+       
        player.hand.forEach(c => {
          if (!c) return;
+         validCards++;
          if (c.type === 'number') score += parseInt(c.value);
          if (c.type === 'modifier') {
-           if (c.value === 'x2') multiplier = 2;
+           if (c.value === 'x2') multiplier *= 2;
            else score += parseInt(c.value.replace('+',''));
          }
        });
-       return score * multiplier;
+       
+       let finalScore = (score * multiplier) + (validCards >= 7 ? 15 : 0);
+       return finalScore;
     }
 
     function renderTallyScreen() {
        const list = document.getElementById('tally-list');
        list.innerHTML = '';
        
+       let highestScore = 0;
+       let winners = [];
+       
        players.forEach(p => {
           let roundScore = calculatePlayerScore(p);
           let newTotal = p.totalScore + roundScore;
+          
+          if (newTotal > highestScore) {
+             highestScore = newTotal;
+             winners = [p.name];
+          } else if (newTotal === highestScore) {
+             winners.push(p.name);
+          }
           
           let statusBadge = '';
           if (p.roundStatus === 'busted') statusBadge = '<span class="text-[10px] bg-rose-600 text-white px-2 py-0.5 rounded ml-2">BUSTED</span>';
           else if (p.roundStatus === 'frozen') statusBadge = '<span class="text-[10px] bg-indigo-600 text-white px-2 py-0.5 rounded ml-2">FROZEN</span>';
           else statusBadge = '<span class="text-[10px] bg-slate-600 text-white px-2 py-0.5 rounded ml-2">STAYED</span>';
           
+          let validCards = p.hand.filter(c=>c).length;
+          let bonusText = validCards >= 7 ? '<span class="text-emerald-300 ml-1">(+15 Bonus)</span>' : '';
+          
           list.innerHTML += `
              <div class="flex justify-between items-center bg-slate-700/50 p-3 rounded-lg border border-slate-600">
                 <div>
                    <div class="font-bold text-slate-200">${p.name} ${statusBadge}</div>
-                   <div class="text-xs text-emerald-400 font-mono mt-1">+${roundScore} this round</div>
+                   <div class="text-xs text-emerald-400 font-mono mt-1">+${roundScore} this round ${bonusText}</div>
                 </div>
                 <div class="text-xl font-bold font-mono text-white">
                    Total: ${newTotal}
@@ -1115,6 +1161,27 @@
              </div>
           `;
        });
+       
+       const nextRoundBtn = document.getElementById('tally-next-round-btn');
+       const celebrationText = document.getElementById('tally-celebration-text');
+       const title = document.getElementById('tally-title');
+       const subtitle = document.getElementById('tally-subtitle');
+       
+       if (highestScore >= 200) {
+           title.innerText = "GAME OVER!";
+           title.classList.replace('text-emerald-400', 'text-amber-400');
+           subtitle.innerText = "Final Scores";
+           celebrationText.innerHTML = `🎉 ${winners.join(' & ')} WINS! 🏆`;
+           celebrationText.classList.remove('hidden');
+           nextRoundBtn.classList.add('hidden');
+           triggerConfetti();
+       } else {
+           title.innerText = "Round Over!";
+           title.classList.replace('text-amber-400', 'text-emerald-400');
+           subtitle.innerText = "Score Summary";
+           celebrationText.classList.add('hidden');
+           nextRoundBtn.classList.remove('hidden');
+       }
        
        document.getElementById('tally-screen').classList.remove('hidden');
     }
