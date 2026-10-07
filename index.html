@@ -12,6 +12,7 @@
 </head>
 <body class="bg-slate-900 text-slate-100 p-4 font-sans antialiased max-w-md mx-auto relative min-h-screen flex flex-col">
 
+  <!-- Local Toasts (Only used for errors/validation now) -->
   <div id="toast-container" class="fixed top-4 left-1/2 -translate-x-1/2 z-[100] flex flex-col gap-2 pointer-events-none w-[90%] max-w-sm"></div>
   
   <!-- CONFETTI OVERLAY -->
@@ -86,20 +87,19 @@
       <p id="waiting-host-msg" class="text-sm text-amber-400 font-bold text-center animate-pulse">Waiting for host to start...</p>
     </div>
     
-    <!-- Leave Button for Lobby -->
     <button onclick="leaveRoom()" class="mt-8 text-rose-400 font-bold underline underline-offset-4 opacity-80 hover:opacity-100">Leave Room</button>
   </div>
 
   <!-- SCREEN 3: MAIN GAME UI -->
   <div id="game-ui" class="hidden flex flex-col h-full min-h-[95vh] relative z-10">
-    <header class="flex justify-between items-center mb-4 border-b border-slate-700 pb-4 gap-2">
+    <header class="flex justify-between items-center mb-3 border-b border-slate-700 pb-3 gap-2">
       <div class="flex-shrink-0">
         <h1 class="text-xl font-bold text-emerald-400 leading-tight">Flip 7</h1>
         <p class="text-sm text-slate-400" id="pile-container">Pile: <span id="cards-remaining">94</span> cards</p>
       </div>
       <div class="flex flex-wrap justify-end gap-2">
         <button onclick="undoAction()" class="bg-amber-600 hover:bg-amber-500 text-white px-3 py-2 rounded-lg text-xs font-bold transition shadow">
-          Undo Last
+          Undo
         </button>
         <button onclick="reshuffleDeckButton()" class="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-2 rounded-lg text-xs font-bold transition shadow">
           Shuffle
@@ -110,8 +110,13 @@
       </div>
     </header>
 
+    <!-- NEW LIVE ACTION LOG FEED -->
+    <div id="action-log-container" class="bg-slate-950 p-2 rounded-lg border border-slate-800 shadow-inner mb-3 h-20 overflow-y-auto no-scrollbar text-[11px] font-mono flex flex-col gap-1.5">
+       <!-- Feed rendered via JS -->
+    </div>
+
     <!-- Global Players Grid -->
-    <div class="flex flex-wrap gap-2 pb-2 mb-4" id="player-status-bar"></div>
+    <div class="flex flex-wrap gap-2 pb-2 mb-3" id="player-status-bar"></div>
 
     <!-- Active Player Focus -->
     <div class="bg-slate-800 p-4 rounded-xl mb-4 shadow-lg border border-slate-700 transition-all duration-300 relative" id="active-player-card">
@@ -255,6 +260,7 @@
     let currentPlayerIndex = 0;
     let turnStack = []; 
     let forcedDrawsLeft = 0;
+    let actionLog = []; // NEW! Feeds the live chat box
     
     let gameSettings = { autoDraw: true, manualEntry: true, showRisk: true, showCount: true };
     
@@ -266,17 +272,14 @@
     }
     
     let myName = localStorage.getItem('flip7_playerName') || "Player";
-    let isHost = localStorage.getItem('flip7_isHost') === 'true'; // RESTORES HOST PRIVILEGES
+    let isHost = localStorage.getItem('flip7_isHost') === 'true'; 
     let currentRoomCode = localStorage.getItem('flip7_roomCode') || "";
-    let lastActionId = 0;
     let previousStateBackup = null; 
 
-    // Auto-fill fields on load
     window.addEventListener('DOMContentLoaded', () => {
         if(myName !== "Player") document.getElementById('my-name-input').value = myName;
         if(currentRoomCode) document.getElementById('join-code-input').value = currentRoomCode;
         
-        // Invisible Auto-Reconnect if page was reloaded mid-game
         if(currentRoomCode) {
             get(ref(db, `rooms/${currentRoomCode}`)).then(snapshot => {
                 if (snapshot.exists()) {
@@ -293,7 +296,6 @@
         }
     });
 
-    // Bind exports
     window.hostGame = hostGame;
     window.joinGame = joinGame;
     window.startGame = startGame;
@@ -318,14 +320,11 @@
         return arr.filter(item => item !== null && item !== undefined);
     }
 
+    // Local-only toast for errors/validation messages
     function showToast(message) {
       const container = document.getElementById('toast-container');
       const toast = document.createElement('div');
-      let bgClass = 'bg-slate-800 border-slate-600';
-      if (message.includes('BUST!') || message.includes('None') || message.includes('No one else') || message.includes('Error') || message.includes('empty')) bgClass = 'bg-rose-700 border-rose-500';
-      if (message.includes('PREVENTED') || message.includes('survived') || message.includes('Undo') || message.includes('FLIP 7')) bgClass = 'bg-emerald-700 border-emerald-500';
-      if (message.includes('Action') || message.includes('Second Chance') || message.includes('FROZEN') || message.includes('yourself') || message.includes('banked')) bgClass = 'bg-indigo-700 border-indigo-500';
-      if (message.includes('🎲')) bgClass = 'bg-cyan-700 border-cyan-500'; 
+      let bgClass = 'bg-rose-700 border-rose-500';
 
       toast.className = `${bgClass} border text-white px-4 py-3 rounded-lg shadow-xl text-sm font-bold transform transition-all duration-300 translate-y-[-100%] opacity-0 text-center z-[100]`;
       toast.innerText = message;
@@ -360,7 +359,6 @@
         }
     }
 
-    // --- LEAVE ROOM FUNCTION ---
     function leaveRoom() {
         localStorage.removeItem('flip7_roomCode');
         localStorage.removeItem('flip7_isHost');
@@ -449,7 +447,7 @@
           currentPlayerIndex: 0,
           turnStack: [],
           forcedDrawsLeft: 0,
-          lastAction: { msg: "Room created!", id: Date.now() },
+          actionLog: [{ msg: "Game Room Created!", time: Date.now() }],
           previousState: null
         }
       });
@@ -531,12 +529,8 @@
             currentPlayerIndex = state.currentPlayerIndex || 0;
             turnStack = ensureArray(state.turnStack);
             forcedDrawsLeft = state.forcedDrawsLeft || 0;
+            actionLog = ensureArray(state.actionLog);
             previousStateBackup = state.previousState || null;
-
-            if (state.lastAction && state.lastAction.id !== lastActionId) {
-              lastActionId = state.lastAction.id;
-              showToast(state.lastAction.msg);
-            }
 
             if (data.status === 'lobby') {
               const list = document.getElementById('lobby-players-list');
@@ -564,7 +558,6 @@
             }
         } catch(err) {
             console.error("Firebase Sync Exception:", err);
-            showToast("Sync Error: Refreshing required.");
         }
       });
     }
@@ -575,7 +568,7 @@
       let stateUpdate = {
         settings: gameSettings,
         deck, players, currentPlayerIndex: 0, turnStack: [], forcedDrawsLeft: 0,
-        lastAction: { msg: "Game Started! Player 1 goes first.", id: Date.now() },
+        actionLog: [{ msg: "🚀 Game Started! Player 1 goes first.", time: Date.now() }],
         previousState: null
       };
       
@@ -586,10 +579,14 @@
     }
 
     function broadcastAction(msg) {
+      if (msg) {
+          actionLog.unshift({ msg: msg, time: Date.now() });
+          if (actionLog.length > 25) actionLog.pop(); // Keep history lean
+      }
       update(ref(db, `rooms/${currentRoomCode}/gameState`), {
         settings: gameSettings,
         deck, players, currentPlayerIndex, turnStack, forcedDrawsLeft,
-        lastAction: { msg: msg, id: Date.now() },
+        actionLog: actionLog,
         previousState: previousStateBackup 
       });
     }
@@ -600,7 +597,8 @@
         players: deepClone(players),
         currentPlayerIndex,
         turnStack: deepClone(turnStack),
-        forcedDrawsLeft
+        forcedDrawsLeft,
+        actionLog: deepClone(actionLog)
       };
     }
 
@@ -616,6 +614,7 @@
       currentPlayerIndex = previousStateBackup.currentPlayerIndex;
       turnStack = ensureArray(previousStateBackup.turnStack);
       forcedDrawsLeft = previousStateBackup.forcedDrawsLeft;
+      actionLog = ensureArray(previousStateBackup.actionLog);
       
       document.getElementById('card-modal').classList.add('hidden');
       document.getElementById('target-modal').classList.add('hidden');
@@ -625,7 +624,7 @@
          update(ref(db, `rooms/${currentRoomCode}`), { status: 'playing' });
       }
 
-      broadcastAction(`${myName} used Undo!`);
+      broadcastAction(`⏪ ${myName} used Undo!`);
     }
 
     // --- GAME ENGINE ---
@@ -665,7 +664,7 @@
       document.getElementById('card-modal').classList.add('hidden');
       
       let player = players[currentPlayerIndex];
-      let drawMsg = isRandom ? `🎲 ${player.name} auto-drew a ${value}` : `${player.name} drew a ${value}`;
+      let drawMsg = isRandom ? `🎲 ${player.name} auto-drew a <b>${value}</b>` : `👉 ${player.name} drew a <b>${value}</b>`;
 
       if (type === 'action') {
         deck.actions[value]--;
@@ -706,25 +705,25 @@
             if (activePlayers.length === 1) {
                 turnStack.push({ returnIndex: currentPlayerIndex, previousForcedDraws: forcedDrawsLeft });
                 forcedDrawsLeft = 3;
-                broadcastAction(`${drawMsg}. No one else active, hijacked themselves!`);
+                broadcastAction(`⚔️ ${drawMsg}. No one else active, hijacked themselves!`);
             } else {
                 openTargetModal("Flip Three!", "Who must draw 3 cards? (You can choose yourself)", activePlayers, (targetIndex) => {
                     turnStack.push({ returnIndex: currentPlayerIndex, previousForcedDraws: forcedDrawsLeft });
                     currentPlayerIndex = targetIndex;
                     forcedDrawsLeft = 3;
-                    broadcastAction(`${drawMsg} & hijacked ${players[targetIndex].name}!`);
+                    broadcastAction(`⚔️ ${drawMsg} & hijacked ${players[targetIndex].name}!`);
                 });
             }
         } else if (value === 'Freeze') {
             let activeOpponents = players.filter(p => p.id !== player.id && p.roundStatus === 'active');
             if (activeOpponents.length === 0) {
                 player.roundStatus = 'frozen';
-                resolveDrawStep(`${drawMsg}. No one else active, froze themselves!`);
+                resolveDrawStep(`🧊 ${drawMsg}. No one else active, froze themselves!`);
             } else {
                 let activePlayers = players.filter(p => p.roundStatus === 'active');
                 openTargetModal("Freeze!", "Choose an active player to freeze.", activePlayers, (targetIndex) => {
                     players[targetIndex].roundStatus = 'frozen';
-                    resolveDrawStep(`${drawMsg} & froze ${players[targetIndex].name}!`);
+                    resolveDrawStep(`🧊 ${drawMsg} & froze ${players[targetIndex].name}!`);
                 });
             }
         }
@@ -741,7 +740,7 @@
             player.hand = [];
             player.bankedActions = []; 
             player.roundStatus = 'busted';
-            popTurnStack(`${drawMsg} AND BUSTED!`); 
+            popTurnStack(`💥 ${drawMsg} AND BUSTED!`); 
           }
         } else {
           player.hand.push({value, type});
@@ -760,9 +759,9 @@
         forcedDrawsLeft--;
         if (forcedDrawsLeft === 0) {
           if (players[currentPlayerIndex].bankedActions.length > 0) {
-              processBankedActions(`${players[currentPlayerIndex].name} survived the Flip 3!`);
+              processBankedActions(`✨ ${players[currentPlayerIndex].name} survived the Flip 3!`);
           } else {
-              popTurnStack(`${players[currentPlayerIndex].name} survived the Flip 3!`); 
+              popTurnStack(`✨ ${players[currentPlayerIndex].name} survived the Flip 3!`); 
           }
         } else {
           broadcastAction(actionMsg); 
@@ -786,35 +785,35 @@
           if (activePlayers.length === 1) {
               turnStack.push({ returnIndex: currentPlayerIndex, previousForcedDraws: forcedDrawsLeft });
               forcedDrawsLeft = 3;
-              broadcastAction(`Banked Flip3 hit themselves!`);
+              broadcastAction(`⚔️ ${precedingMsg} Banked Flip3 hit themselves!`);
           } else {
               openTargetModal("Banked Flip Three!", "Who must draw 3 cards?", activePlayers, (targetIndex) => {
                   turnStack.push({ returnIndex: currentPlayerIndex, previousForcedDraws: forcedDrawsLeft });
                   currentPlayerIndex = targetIndex;
                   forcedDrawsLeft = 3;
-                  broadcastAction(`Banked Flip3 unleashed on ${players[targetIndex].name}!`);
+                  broadcastAction(`⚔️ ${precedingMsg} Banked Flip3 unleashed on ${players[targetIndex].name}!`);
               });
           }
       } else if (action === 'Freeze') {
           let activeOpponents = players.filter(p => p.id !== player.id && p.roundStatus === 'active');
           if (activeOpponents.length === 0) {
               player.roundStatus = 'frozen';
-              processBankedActions(`Banked Freeze froze themselves!`); 
+              processBankedActions(`🧊 ${precedingMsg} Banked Freeze froze themselves!`); 
           } else {
               let activePlayers = players.filter(p => p.roundStatus === 'active');
               openTargetModal("Banked Freeze!", "Choose an active player to freeze.", activePlayers, (targetIndex) => {
                   players[targetIndex].roundStatus = 'frozen';
-                  processBankedActions(`Banked Freeze froze ${players[targetIndex].name}!`);
+                  processBankedActions(`🧊 ${precedingMsg} Banked Freeze froze ${players[targetIndex].name}!`);
               });
           }
       } else if (action === 'PassSecondChance') {
           let eligible = players.filter(p => !p.secondChance && p.roundStatus === 'active');
           if (eligible.length === 0) {
-              processBankedActions(`${precedingMsg} Banked Second Chance discarded.`);
+              processBankedActions(`🗑️ ${precedingMsg} Banked Second Chance discarded.`);
           } else {
               openTargetModal("Banked Second Chance", "You already have one. Who gets this?", eligible, (targetIndex) => {
                   players[targetIndex].secondChance = true;
-                  processBankedActions(`${precedingMsg} Gave Banked Second Chance to ${players[targetIndex].name}!`);
+                  processBankedActions(`🎁 ${precedingMsg} Gave Banked Second Chance to ${players[targetIndex].name}!`);
               });
           }
       }
@@ -843,7 +842,7 @@
       if(!isMyTurn()) return;
       backupStateBeforeAction();
       players[currentPlayerIndex].roundStatus = 'stayed';
-      advanceTurnLogic(`${players[currentPlayerIndex].name} Banked their cards!`);
+      advanceTurnLogic(`✅ ${players[currentPlayerIndex].name} Stayed!`);
     }
 
     function advanceTurnLogic(msg) {
@@ -882,7 +881,7 @@
        
        update(ref(db, `rooms/${currentRoomCode}`), { 
          status: 'playing',
-         gameState: { settings: gameSettings, deck, players, currentPlayerIndex, turnStack, forcedDrawsLeft, lastAction: { msg: "New Round Started! Player 1 goes first.", id: Date.now() }, previousState: previousStateBackup }
+         gameState: { settings: gameSettings, deck, players, currentPlayerIndex, turnStack, forcedDrawsLeft, actionLog: [{ msg: "🚀 New Round Started! Player 1 goes first.", time: Date.now() }], previousState: previousStateBackup }
        });
     }
 
@@ -904,7 +903,7 @@
        
        update(ref(db, `rooms/${currentRoomCode}`), { 
          status: 'playing',
-         gameState: { settings: gameSettings, deck, players, currentPlayerIndex, turnStack, forcedDrawsLeft, lastAction: { msg: "Game Hard Reset!", id: Date.now() }, previousState: previousStateBackup }
+         gameState: { settings: gameSettings, deck, players, currentPlayerIndex, turnStack, forcedDrawsLeft, actionLog: [{ msg: "🔄 Game Hard Reset!", time: Date.now() }], previousState: previousStateBackup }
        });
     }
 
@@ -915,27 +914,7 @@
         p.hand.forEach(card => deck[card.type + 's'][card.value]--);
         if (p.secondChance) deck.actions['SecondChance']--;
       });
-      broadcastAction("Discards shuffled back into the deck!");
-    }
-
-    function openTargetModal(title, desc, targetOptions, callback) {
-      document.getElementById('target-modal-title').innerText = title;
-      document.getElementById('target-modal-desc').innerText = desc;
-      const list = document.getElementById('target-list');
-      list.innerHTML = '';
-      
-      targetOptions.forEach(target => {
-        const btn = document.createElement('button');
-        btn.className = "w-full bg-slate-700 hover:bg-indigo-600 text-white font-bold py-4 rounded-xl transition text-lg";
-        btn.innerText = target.name;
-        btn.onclick = () => {
-          document.getElementById('target-modal').classList.add('hidden');
-          let globalIdx = players.findIndex(p => p.id === target.id);
-          callback(globalIdx);
-        };
-        list.appendChild(btn);
-      });
-      document.getElementById('target-modal').classList.remove('hidden');
+      broadcastAction("♻️ Discards shuffled back into the deck!");
     }
 
     function updateUI() {
@@ -947,6 +926,16 @@
           
           let amIActivePlayer = isMyTurn();
 
+          // Live Action Feed
+          const logContainer = document.getElementById('action-log-container');
+          if (logContainer && actionLog.length > 0) {
+              logContainer.innerHTML = actionLog.map(log => {
+                  let timeStr = new Date(log.time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'});
+                  return `<div class="text-slate-300"><span class="text-slate-600 mr-2">[${timeStr}]</span>${log.msg}</div>`;
+              }).join('');
+          }
+
+          // Top Horizon Status Bar
           const statusBar = document.getElementById('player-status-bar');
           statusBar.innerHTML = players.map((p, i) => {
             let opacity = p.roundStatus === 'active' ? 'opacity-100' : 'opacity-60';
@@ -1001,8 +990,8 @@
 
           let myPlayer = players.find(p => p.id === myPlayerId);
           if(myPlayer) {
-             let myValidCount = myPlayer.hand.filter(c=>c).length;
-             let myFlip7Text = myValidCount >= 7 ? ' <span class="text-emerald-300 animate-pulse text-[10px] ml-1">(+15)</span>' : '';
+             let myValidNumberCount = myPlayer.hand.filter(c => c && c.type === 'number').length;
+             let myFlip7Text = myValidNumberCount >= 7 ? ' <span class="text-emerald-300 animate-pulse text-[10px] ml-1">(+15 FLIP 7!)</span>' : '';
              document.getElementById('my-score').innerHTML = calculatePlayerScore(myPlayer) + myFlip7Text;
              
              let statBadge = document.getElementById('my-status-badge');
@@ -1173,8 +1162,8 @@
               badge.classList.add('hidden');
           }
           
-          let validCardCount = player.hand.filter(c => c).length;
-          let flip7Text = validCardCount >= 7 ? ' <span class="text-xs text-emerald-300 animate-pulse ml-1">(+15 FLIP 7!)</span>' : '';
+          let validNumberCount = player.hand.filter(c => c && c.type === 'number').length;
+          let flip7Text = validNumberCount >= 7 ? ' <span class="text-xs text-emerald-300 animate-pulse ml-1">(+15 FLIP 7!)</span>' : '';
           document.getElementById('expected-value').innerHTML = currentScore + flip7Text;
 
       } catch (err) {
@@ -1184,21 +1173,24 @@
 
     function calculatePlayerScore(player) {
        if(!player || !player.hand) return 0;
-       let score = 0;
+       let numberSum = 0;
+       let bonusSum = 0;
        let multiplier = 1;
-       let validCards = 0;
+       let numberCardCount = 0;
        
        player.hand.forEach(c => {
          if (!c) return;
-         validCards++;
-         if (c.type === 'number') score += parseInt(c.value) || 0;
+         if (c.type === 'number') {
+             numberSum += parseInt(c.value) || 0;
+             numberCardCount++;
+         }
          if (c.type === 'modifier') {
            if (String(c.value) === 'x2') multiplier *= 2;
-           else score += parseInt(String(c.value).replace('+','')) || 0;
+           else bonusSum += parseInt(String(c.value).replace('+','')) || 0;
          }
        });
        
-       let finalScore = (score * multiplier) + (validCards >= 7 ? 15 : 0);
+       let finalScore = (numberSum * multiplier) + bonusSum + (numberCardCount >= 7 ? 15 : 0);
        return finalScore;
     }
 
@@ -1225,8 +1217,8 @@
           else if (p.roundStatus === 'frozen') statusBadge = '<span class="text-[10px] bg-indigo-600 text-white px-2 py-0.5 rounded ml-2">FROZEN</span>';
           else statusBadge = '<span class="text-[10px] bg-slate-600 text-white px-2 py-0.5 rounded ml-2">STAYED</span>';
           
-          let validCards = p.hand.filter(c=>c).length;
-          let bonusText = validCards >= 7 ? '<span class="text-emerald-300 ml-1">(+15 Bonus)</span>' : '';
+          let validNumberCount = p.hand.filter(c => c && c.type === 'number').length;
+          let bonusText = validNumberCount >= 7 ? '<span class="text-emerald-300 ml-1">(+15 Bonus)</span>' : '';
           
           list.innerHTML += `
              <div class="flex justify-between items-center bg-slate-700/50 p-3 rounded-lg border border-slate-600">
